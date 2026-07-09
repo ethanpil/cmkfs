@@ -1,0 +1,500 @@
+package ui
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/ethanpil/cmkfs/internal/device"
+	"github.com/ethanpil/cmkfs/internal/executor"
+	"github.com/ethanpil/cmkfs/internal/safety"
+	"github.com/ethanpil/cmkfs/internal/schema"
+)
+
+// testConfig wires the App to fakes: in-memory devices, empty proc/sys roots
+// (no mounts, swaps, or holders), and an executor stub the test controls.
+func testConfig(t *testing.T, devs []device.Device, runCh chan executor.Event) Config {
+	t.Helper()
+	tmp := t.TempDir()
+	backends := map[string]device.Backend{}
+	for _, s := range schema.Schemas {
+		backends[s.Binary] = device.Backend{Binary: s.Binary, Path: "/sbin/" + s.Binary, Version: "99.0"}
+	}
+	return Config{
+		Schemas:  schema.Schemas,
+		Backends: backends,
+		Sys:      safety.System{ProcRoot: tmp, SysRoot: tmp},
+		Discover: func(showLoop bool) ([]device.Device, error) { return devs, nil },
+		Run: func(ctx context.Context, argv []string, gate func() (safety.Report, bool)) <-chan executor.Event {
+			if runCh == nil {
+				ch := make(chan executor.Event)
+				close(ch)
+				return ch
+			}
+			return runCh
+		},
+	}
+}
+
+func cleanDisk() device.Device {
+	return device.Device{Path: "/dev/sde", KName: "sde", MajMin: "8:64", Type: "disk", SizeBytes: 500107862016}
+}
+
+func signedPart() device.Device {
+	return device.Device{Path: "/dev/sdf1", KName: "sdf1", MajMin: "8:81", Type: "part", SizeBytes: 4000785982464,
+		FSType: "xfs", Label: "backup", UUID: "5a4b3c2d-3333-4c7d-9e5f-0123456789ab"}
+}
+
+func key(s string) tea.KeyMsg {
+	switch s {
+	case "enter":
+		return tea.KeyMsg{Type: tea.KeyEnter}
+	case "esc":
+		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
+	case "space":
+		return tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")}
+	case "up":
+		return tea.KeyMsg{Type: tea.KeyUp}
+	case "down":
+		return tea.KeyMsg{Type: tea.KeyDown}
+	case "left":
+		return tea.KeyMsg{Type: tea.KeyLeft}
+	case "right":
+		return tea.KeyMsg{Type: tea.KeyRight}
+	case "backspace":
+		return tea.KeyMsg{Type: tea.KeyBackspace}
+	case "ctrl+c":
+		return tea.KeyMsg{Type: tea.KeyCtrlC}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+}
+
+func press(a *App, keys ...string) tea.Cmd {
+	var cmd tea.Cmd
+	for _, k := range keys {
+		_, cmd = a.Update(key(k))
+	}
+	return cmd
+}
+
+func typeText(a *App, s string) {
+	for _, r := range s {
+		a.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+}
+
+// focusOption moves the form focus to the option with the given ID.
+func focusOption(t *testing.T, a *App, id string) {
+	t.Helper()
+	for i, o := range a.fs.Options {
+		if o.ID == id {
+			a.form.focus = i
+			return
+		}
+	}
+	t.Fatalf("option %s not found", id)
+}
+
+func TestScreenTransitionsHappyPath(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	if a.screen != ScreenDeviceList {
+		t.Fatalf("start screen = %v", a.screen)
+	}
+	// Cursor starts on the header row; Enter there selects nothing.
+	if a.list.cursor != -1 {
+		t.Fatal("cursor must start on the header row")
+	}
+	press(a, "enter")
+	if a.screen != ScreenDeviceList {
+		t.Fatal("Enter on header row must not advance")
+	}
+	press(a, "down", "enter")
+	if a.screen != ScreenFSPicker || a.dev == nil || a.dev.Path != "/dev/sde" {
+		t.Fatalf("device selection failed: screen %v dev %+v", a.screen, a.dev)
+	}
+	press(a, "enter") // pick ext4
+	if a.screen != ScreenOptionsForm || a.fs.ID != "ext4" {
+		t.Fatalf("fs pick failed: screen %v", a.screen)
+	}
+	press(a, "tab", "enter") // continue with defaults
+	if a.screen != ScreenConfirm {
+		t.Fatalf("continue failed: screen %v (footer %q)", a.screen, a.form.footerErr)
+	}
+	if a.display != "mkfs.ext4 /dev/sde" {
+		t.Fatalf("display = %q", a.display)
+	}
+	// Clean device: no force flag, Yes/No selector, default No.
+	if a.report.NeedsForce() {
+		t.Fatal("clean device must not need force")
+	}
+	if a.confirm.typedMode {
+		t.Fatal("no warnings -> Yes/No selector, not typed confirmation")
+	}
+	if a.confirm.yesNo != 0 {
+		t.Fatal("selector must default to No")
+	}
+}
+
+func TestEscBacktrackingPreservesFormValues(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter") // to ext4 form
+	focusOption(t, a, "label")
+	typeText(a, "media")
+	if a.values["label"] != "media" {
+		t.Fatalf("label value = %v", a.values["label"])
+	}
+	press(a, "tab", "enter")
+	if a.screen != ScreenConfirm {
+		t.Fatalf("expected confirm, got %v (footer %q)", a.screen, a.form.footerErr)
+	}
+	press(a, "esc")
+	if a.screen != ScreenOptionsForm {
+		t.Fatal("Esc from Confirm must return to the form")
+	}
+	if a.values["label"] != "media" {
+		t.Fatalf("form values must survive Esc from Confirm, got %v", a.values["label"])
+	}
+	// Esc back to the picker and re-picking the same fs keeps values too.
+	press(a, "esc", "enter")
+	if a.values["label"] != "media" {
+		t.Fatal("re-picking the same filesystem must keep form values")
+	}
+}
+
+func TestTypedConfirmationGate(t *testing.T) {
+	cfg := testConfig(t, []device.Device{signedPart()}, nil)
+	cfg.PrintMode = true
+	a := NewApp(cfg)
+	press(a, "down", "enter", "enter", "tab", "enter")
+	if a.screen != ScreenConfirm {
+		t.Fatalf("expected confirm, got %v", a.screen)
+	}
+	if !a.confirm.typedMode {
+		t.Fatal("SIGNATURE_FS warning must force typed confirmation")
+	}
+	if !a.report.NeedsForce() {
+		t.Fatal("existing signature must set NeedsForce")
+	}
+	// Force flag present in the command (acceptance criterion 5).
+	if !strings.Contains(a.display, "mkfs.ext4 -F ") {
+		t.Fatalf("force flag missing from %q", a.display)
+	}
+
+	// Wrong name: Enter is ignored.
+	typeText(a, "sdz9")
+	press(a, "enter")
+	if a.screen != ScreenConfirm || a.PrintOut != "" {
+		t.Fatal("wrong device name must not confirm")
+	}
+	// Clear and type the exact base name.
+	for range "sdz9" {
+		press(a, "backspace")
+	}
+	typeText(a, "sdf1")
+	press(a, "enter")
+	if a.PrintOut == "" {
+		t.Fatal("correct name in PrintMode must set PrintOut")
+	}
+	if a.PrintOut != a.display {
+		t.Fatalf("PrintOut %q != display %q", a.PrintOut, a.display)
+	}
+}
+
+func TestConflictDimmingAndReset(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter") // ext4 form
+
+	// Set bytes_per_inode first.
+	focusOption(t, a, "bytes_per_inode")
+	typeText(a, "4096")
+	if a.values["bytes_per_inode"] != int64(4096) {
+		t.Fatalf("bytes_per_inode = %v", a.values["bytes_per_inode"])
+	}
+	if a.disabledReason("usage_type") == "" {
+		t.Fatal("usage_type must be disabled while bytes_per_inode is set")
+	}
+
+	// Now clear it and set usage_type instead.
+	for range "4096" {
+		press(a, "backspace")
+	}
+	if a.disabledReason("usage_type") != "" {
+		t.Fatal("usage_type must re-enable when the conflict clears")
+	}
+	focusOption(t, a, "usage_type")
+	press(a, "right") // auto -> small
+	if a.values["usage_type"] != "small" {
+		t.Fatalf("usage_type = %v", a.values["usage_type"])
+	}
+	if a.disabledReason("bytes_per_inode") == "" {
+		t.Fatal("bytes_per_inode must be disabled while usage_type is set")
+	}
+	if a.disabledReason("inode_size") == "" {
+		t.Fatal("inode_size must be disabled while usage_type is set")
+	}
+	// And the conflicting option was reset to its omit value.
+	if a.values["bytes_per_inode"] != int64(0) {
+		t.Fatalf("bytes_per_inode must reset, got %v", a.values["bytes_per_inode"])
+	}
+}
+
+func TestInvalidFieldBlocksContinue(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter")
+	focusOption(t, a, "label")
+	typeText(a, strings.Repeat("x", 17)) // over the 16-byte cap
+	if a.form.invalid["label"] == "" {
+		t.Fatal("oversized label must be flagged invalid")
+	}
+	press(a, "tab", "enter")
+	if a.screen != ScreenOptionsForm {
+		t.Fatal("invalid field must block Continue")
+	}
+	if a.form.footerErr == "" {
+		t.Fatal("footer must show the validation error")
+	}
+}
+
+func TestExtraArgsListAndGuardrails(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter")
+	focusOption(t, a, "journal") // a is literal input on text fields
+	press(a, "a")                // expand Advanced
+	if !a.form.advancedOpen {
+		t.Fatal("a must expand the Advanced section")
+	}
+	// Focus the extra input (after the last option).
+	a.form.focus = len(a.fs.Options)
+	typeText(a, "-E")
+	press(a, "enter")
+	typeText(a, "nodiscard")
+	press(a, "enter")
+	if len(a.extra) != 2 || a.extra[0] != "-E" || a.extra[1] != "nodiscard" {
+		t.Fatalf("extra = %v", a.extra)
+	}
+	// Guardrail: /dev/ path rejected at add time with the reason shown.
+	typeText(a, "/dev/sdz")
+	press(a, "enter")
+	if len(a.extra) != 2 {
+		t.Fatalf("guardrail failed: %v", a.extra)
+	}
+	if !strings.Contains(a.form.extraErr, "/dev/") {
+		t.Fatalf("extraErr = %q", a.form.extraErr)
+	}
+
+	// Continue: EXTRA_ARGS warning must force typed confirmation.
+	press(a, "tab", "enter")
+	if a.screen != ScreenConfirm {
+		t.Fatalf("continue failed: %v %q", a.screen, a.form.footerErr)
+	}
+	if !a.report.Has("EXTRA_ARGS") {
+		t.Fatal("EXTRA_ARGS finding missing")
+	}
+	if !a.confirm.typedMode {
+		t.Fatal("extra args must force typed confirmation")
+	}
+	if a.report.NeedsForce() {
+		t.Fatal("extra args alone must never inject force")
+	}
+	// Tokens appear before the device in the command.
+	if !strings.Contains(a.display, "-E nodiscard /dev/sde") {
+		t.Fatalf("display = %q", a.display)
+	}
+}
+
+func TestBlockedDeviceUnselectable(t *testing.T) {
+	ro := cleanDisk()
+	ro.ReadOnly = true
+	a := NewApp(testConfig(t, []device.Device{ro}, nil))
+	press(a, "down", "enter")
+	if a.screen != ScreenDeviceList {
+		t.Fatal("blocked (read-only) device must not be selectable")
+	}
+}
+
+func TestGateFailureBouncesToConfirm(t *testing.T) {
+	runCh := make(chan executor.Event, 1)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter", "tab", "enter")
+	press(a, "right", "enter") // Yes
+	if a.screen != ScreenExecute {
+		t.Fatalf("expected execute, got %v", a.screen)
+	}
+	gateReport := safety.Report{Findings: []safety.Finding{
+		{Severity: safety.Blocker, Code: "MOUNTED", Message: "/dev/sde is mounted at /mnt. Unmount it first."},
+	}}
+	a.Update(execEvMsg(executor.Event{Done: true, Exit: -1, Gate: &gateReport}))
+	if a.screen != ScreenConfirm {
+		t.Fatalf("gate failure must bounce to Confirm, got %v", a.screen)
+	}
+	if !a.report.Has("MOUNTED") {
+		t.Fatal("fresh gate report must be shown")
+	}
+	if !a.report.Blocked() {
+		t.Fatal("report must be blocked")
+	}
+}
+
+func TestExecuteFlowAndResult(t *testing.T) {
+	runCh := make(chan executor.Event, 8)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter", "tab", "enter", "right", "enter")
+	if a.screen != ScreenExecute {
+		t.Fatalf("expected execute, got %v", a.screen)
+	}
+	a.Update(execEvMsg(executor.Event{Line: "Creating filesystem..."}))
+	a.Update(execEvMsg(executor.Event{Line: "done"}))
+	if len(a.exec.lines) != 2 {
+		t.Fatalf("lines = %v", a.exec.lines)
+	}
+	a.Update(execEvMsg(executor.Event{Done: true, Exit: 0}))
+	if a.screen != ScreenResult || !a.result.success {
+		t.Fatalf("expected success result, got %v %+v", a.screen, a.result)
+	}
+	// n goes back to a refreshed device list.
+	press(a, "n")
+	if a.screen != ScreenDeviceList || a.dev != nil {
+		t.Fatal("n must return to the device list")
+	}
+}
+
+func TestExecuteAbortFlow(t *testing.T) {
+	runCh := make(chan executor.Event, 8)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter", "tab", "enter", "right", "enter")
+
+	// A single Ctrl+C never kills anything: it only arms the window.
+	press(a, "ctrl+c")
+	if a.exec.abortPrompt {
+		t.Fatal("single Ctrl+C must not open the abort prompt")
+	}
+	if a.exec.ctrlCArmed.IsZero() {
+		t.Fatal("first Ctrl+C must arm the window")
+	}
+	press(a, "ctrl+c")
+	if !a.exec.abortPrompt {
+		t.Fatal("second Ctrl+C within the window must open the abort prompt")
+	}
+	// Esc dismisses; execution was never paused.
+	press(a, "esc")
+	if a.exec.abortPrompt {
+		t.Fatal("Esc must dismiss the abort prompt")
+	}
+	// Reopen and type the wrong word: nothing happens.
+	press(a, "ctrl+c", "ctrl+c")
+	typeText(a, "abort")
+	press(a, "enter")
+	if a.exec.aborting {
+		t.Fatal("lowercase abort must not kill")
+	}
+	for range "abort" {
+		press(a, "backspace")
+	}
+	typeText(a, "ABORT")
+	press(a, "enter")
+	if !a.exec.aborting {
+		t.Fatal("typed ABORT must cancel the executor")
+	}
+	// Executor reports the aborted death.
+	a.Update(execEvMsg(executor.Event{Done: true, Exit: -1, Aborted: true}))
+	if a.screen != ScreenResult || !a.result.aborted {
+		t.Fatalf("expected aborted result, got %v %+v", a.screen, a.result)
+	}
+}
+
+func TestQuitDisabledDuringExecute(t *testing.T) {
+	runCh := make(chan executor.Event, 1)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter", "tab", "enter", "right", "enter")
+	if cmd := press(a, "q"); cmd != nil {
+		t.Fatal("q must be disabled during execution")
+	}
+	if cmd := press(a, "esc"); cmd != nil {
+		t.Fatal("esc must be disabled during execution")
+	}
+	if a.screen != ScreenExecute {
+		t.Fatal("must stay on execute screen")
+	}
+}
+
+func TestTerminalTooSmall(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	a.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	view := a.View()
+	if !strings.Contains(view, "Terminal too small (need 80x24, have 60x20)") {
+		t.Fatalf("view = %q", view)
+	}
+	// Growing back restores the UI.
+	a.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if strings.Contains(a.View(), "Terminal too small") {
+		t.Fatal("view must restore after resize")
+	}
+}
+
+func TestInitialDeviceSkipsScreen1(t *testing.T) {
+	cfg := testConfig(t, []device.Device{cleanDisk()}, nil)
+	cfg.InitialDevicePath = "/dev/sde"
+	a := NewApp(cfg)
+	if a.screen != ScreenFSPicker || a.dev == nil || a.dev.Path != "/dev/sde" {
+		t.Fatalf("positional device must start on Screen 2: %v", a.screen)
+	}
+}
+
+func TestPickerDisabledWhenBackendMissing(t *testing.T) {
+	cfg := testConfig(t, []device.Device{cleanDisk()}, nil)
+	cfg.Backends["mkfs.xfs"] = device.Backend{Binary: "mkfs.xfs"} // not found
+	a := NewApp(cfg)
+	press(a, "down", "enter")
+	// Move to xfs (second entry) and try to select it.
+	press(a, "down", "enter")
+	if a.screen != ScreenFSPicker {
+		t.Fatal("missing backend must not be selectable")
+	}
+	if !strings.Contains(a.View(), "mkfs.xfs not found — install xfsprogs") {
+		t.Fatal("missing-backend reason must be shown")
+	}
+}
+
+func TestPickerTooSmallDevice(t *testing.T) {
+	small := cleanDisk()
+	small.SizeBytes = 134217728 // 128 MiB < xfs 300 MiB minimum
+	a := NewApp(testConfig(t, []device.Device{small}, nil))
+	press(a, "down", "enter")
+	press(a, "down", "enter") // try xfs
+	if a.screen != ScreenFSPicker {
+		t.Fatal("too-small device must not allow xfs")
+	}
+	// ext4 (no minimum) still works.
+	press(a, "up", "enter")
+	if a.screen != ScreenOptionsForm || a.fs.ID != "ext4" {
+		t.Fatalf("ext4 must remain selectable, got %v", a.screen)
+	}
+}
+
+func TestVersionWarningShown(t *testing.T) {
+	cfg := testConfig(t, []device.Device{cleanDisk()}, nil)
+	cfg.Backends["mkfs.xfs"] = device.Backend{Binary: "mkfs.xfs", Path: "/sbin/mkfs.xfs", Version: "4.5.0"}
+	a := NewApp(cfg)
+	press(a, "down", "enter")
+	if !strings.Contains(a.View(), "mkfs.xfs 4.5.0 is older than the tested minimum 5.0.0") {
+		t.Fatalf("version warning missing from picker view")
+	}
+}
+
+func TestBoolToggleEmission(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter")
+	focusOption(t, a, "journal")
+	press(a, "space")
+	if a.values["journal"] != false {
+		t.Fatalf("journal = %v", a.values["journal"])
+	}
+	press(a, "c")
+	if a.display != "mkfs.ext4 -O '^has_journal' /dev/sde" {
+		t.Fatalf("display = %q", a.display)
+	}
+}

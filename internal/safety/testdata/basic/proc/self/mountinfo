@@ -1,0 +1,5 @@
+22 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw
+23 22 259:1 / /boot/efi rw,relatime shared:2 - vfat /dev/nvme0n1p1 rw
+36 22 8:17 / /mnt/data rw,relatime shared:3 - ext4 /dev/sdb1 rw
+37 22 8:81 / /mnt/my\040backup rw,relatime shared:4 - xfs /dev/sdf1 rw
+40 22 0:44 / /tmp rw,nosuid - tmpfs tmpfs rw

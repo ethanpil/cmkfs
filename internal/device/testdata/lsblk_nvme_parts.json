@@ -1,0 +1,68 @@
+{
+   "blockdevices": [
+      {
+         "name": "/dev/nvme0n1",
+         "kname": "/dev/nvme0n1",
+         "maj:min": "259:0",
+         "type": "disk",
+         "size": 1024209543168,
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": "gpt",
+         "mountpoints": [
+             null
+         ],
+         "model": "WD_BLACK SN850X 1000GB",
+         "serial": "23111A800123",
+         "tran": "nvme",
+         "rota": false,
+         "ro": false,
+         "rm": false,
+         "pkname": null,
+         "children": [
+            {
+               "name": "/dev/nvme0n1p1",
+               "kname": "/dev/nvme0n1p1",
+               "maj:min": "259:1",
+               "type": "part",
+               "size": 536870912,
+               "fstype": "vfat",
+               "label": "EFI",
+               "uuid": "A1B2-C3D4",
+               "pttype": "gpt",
+               "mountpoints": [
+                   "/boot/efi"
+               ],
+               "model": null,
+               "serial": null,
+               "tran": null,
+               "rota": false,
+               "ro": false,
+               "rm": false,
+               "pkname": "/dev/nvme0n1"
+            },{
+               "name": "/dev/nvme0n1p2",
+               "kname": "/dev/nvme0n1p2",
+               "maj:min": "259:2",
+               "type": "part",
+               "size": 1023671623680,
+               "fstype": "ext4",
+               "label": null,
+               "uuid": "9d8e7f6a-2222-4b6c-8d4e-fedcba098765",
+               "pttype": "gpt",
+               "mountpoints": [
+                   "/"
+               ],
+               "model": null,
+               "serial": null,
+               "tran": null,
+               "rota": false,
+               "ro": false,
+               "rm": false,
+               "pkname": "/dev/nvme0n1"
+            }
+         ]
+      }
+   ]
+}

@@ -1,0 +1,48 @@
+{
+   "blockdevices": [
+      {
+         "name": "/dev/sdb",
+         "kname": "/dev/sdb",
+         "maj:min": "8:16",
+         "type": "disk",
+         "size": 500107862016,
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": "gpt",
+         "mountpoints": [
+             null
+         ],
+         "model": "Samsung SSD 870",
+         "serial": "S5Y1NG0R123456",
+         "tran": "sata",
+         "rota": false,
+         "ro": false,
+         "rm": false,
+         "pkname": null,
+         "children": [
+            {
+               "name": "/dev/sdb1",
+               "kname": "/dev/sdb1",
+               "maj:min": "8:17",
+               "type": "part",
+               "size": 500106813952,
+               "fstype": "ext4",
+               "label": "data",
+               "uuid": "3f5c9e2a-1111-4a5b-9c3d-abcdef012345",
+               "pttype": "gpt",
+               "mountpoints": [
+                   "/mnt/data"
+               ],
+               "model": null,
+               "serial": null,
+               "tran": null,
+               "rota": false,
+               "ro": false,
+               "rm": false,
+               "pkname": "/dev/sdb"
+            }
+         ]
+      }
+   ]
+}

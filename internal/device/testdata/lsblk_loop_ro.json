@@ -1,0 +1,88 @@
+{
+   "blockdevices": [
+      {
+         "name": "/dev/loop9",
+         "kname": "/dev/loop9",
+         "maj:min": "7:9",
+         "type": "loop",
+         "size": 2147483648,
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": null,
+         "mountpoints": [
+             null
+         ],
+         "model": null,
+         "serial": null,
+         "tran": null,
+         "rota": false,
+         "ro": false,
+         "rm": false,
+         "pkname": null
+      },
+      {
+         "name": "/dev/sdd",
+         "kname": "/dev/sdd",
+         "maj:min": "8:48",
+         "type": "disk",
+         "size": 31268536320,
+         "fstype": "iso9660",
+         "label": "UBUNTU_INSTALL",
+         "uuid": "2024-04-25-10-30-40-00",
+         "pttype": null,
+         "mountpoints": [
+             null
+         ],
+         "model": "Cruzer Blade",
+         "serial": "4C530001230423118093",
+         "tran": "usb",
+         "rota": false,
+         "ro": true,
+         "rm": true,
+         "pkname": null
+      },
+      {
+         "name": "/dev/zram0",
+         "kname": "/dev/zram0",
+         "maj:min": "252:0",
+         "type": "disk",
+         "size": 8589934592,
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": null,
+         "mountpoints": [
+             "[SWAP]"
+         ],
+         "model": null,
+         "serial": null,
+         "tran": null,
+         "rota": false,
+         "ro": false,
+         "rm": false,
+         "pkname": null
+      },
+      {
+         "name": "/dev/sr0",
+         "kname": "/dev/sr0",
+         "maj:min": "11:0",
+         "type": "rom",
+         "size": 1073741312,
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": null,
+         "mountpoints": [
+             null
+         ],
+         "model": "DVD-RW",
+         "serial": null,
+         "tran": "sata",
+         "rota": true,
+         "ro": false,
+         "rm": true,
+         "pkname": null
+      }
+   ]
+}

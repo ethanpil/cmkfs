@@ -1,0 +1,12 @@
+go test fuzz v1
+string("ext4")
+string("media")
+string("largefile4")
+int64(0)
+bool(true)
+string("64k")
+int64(3)
+string("-E")
+string("nodiscard")
+string("/dev/loop9")
+bool(false)

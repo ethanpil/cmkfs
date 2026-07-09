@@ -1,0 +1,25 @@
+{
+   "blockdevices": [
+      {
+         "name": "/dev/sda",
+         "kname": "/dev/sda",
+         "maj:min": "8:0",
+         "type": "disk",
+         "size": "500107862016",
+         "fstype": null,
+         "label": null,
+         "uuid": null,
+         "pttype": "dos",
+         "mountpoints": [
+             null
+         ],
+         "model": "OldDisk",
+         "serial": null,
+         "tran": "sata",
+         "rota": "1",
+         "ro": "0",
+         "rm": "0",
+         "pkname": null
+      }
+   ]
+}

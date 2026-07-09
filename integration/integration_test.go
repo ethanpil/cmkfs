@@ -55,7 +55,16 @@ func makeLoop(t *testing.T, size string) string {
 	t.Cleanup(func() {
 		_ = exec.Command("losetup", "-d", dev).Run()
 	})
+	// Loop numbers get reused across tests; without settling, lsblk can
+	// briefly report the previous attachment's filesystem signature.
+	settleUdev()
 	return dev
+}
+
+// settleUdev waits for udev to finish processing device events, so lsblk
+// (which reads the udev database) reflects the device's current state.
+func settleUdev() {
+	_ = exec.Command("udevadm", "settle", "--timeout", "10").Run()
 }
 
 func schemaByID(t *testing.T, id string) schema.Schema {
@@ -303,6 +312,7 @@ func TestFinalGateRace(t *testing.T) {
 	if out, err := exec.Command("mkfs.ext4", "-q", loop).CombinedOutput(); err != nil {
 		t.Fatalf("mkfs: %v: %s", err, out)
 	}
+	settleUdev() // the change must be visible to lsblk before the gate runs
 	uuidBefore := blkid(t, loop, "UUID")
 
 	gate := safety.Gate{Sys: sys, Discover: device.Discover, ShowLoop: true}

@@ -7,14 +7,13 @@ partitioning.
 ![cmkfs walkthrough: device list → filesystem picker → options → confirm → result](docs/demo.gif)
 
 cmkfs guides you through selecting a block device, choosing a filesystem
-(ext4, XFS, or Btrfs), configuring a curated set of options with built-in
-help, previewing the exact `mkfs.*` command that will run, and executing it
-with live output.
+(ext4, XFS, Btrfs, FAT32/vfat, exFAT, or F2FS), configuring a curated set
+of options with built-in help, previewing the exact `mkfs.*` command that
+will run, and executing it with live output.
 
 cmkfs never implements filesystem creation itself. It is a command generator
 and executor: its entire job is to build a correct argv for the system's
-`mkfs.ext4`, `mkfs.xfs`, or `mkfs.btrfs` binary and run it as a subprocess.
-No shell is ever involved.
+`mkfs.*` binary and run it as a subprocess. No shell is ever involved.
 
 ## Installation
 
@@ -25,7 +24,7 @@ set `VER` to a published version and swap `amd64` for `arm64` on ARM.
 **Debian / Ubuntu (`.deb`)**
 
 ```sh
-VER=0.1.0-beta.1
+VER=0.2.0
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.deb
 sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 ```
@@ -33,7 +32,7 @@ sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 **Fedora / RHEL / openSUSE (`.rpm`)**
 
 ```sh
-VER=0.1.0-beta.1
+VER=0.2.0
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.rpm
 sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 ```
@@ -41,7 +40,7 @@ sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 **Alpine (`.apk`)** — the package is unsigned, so `--allow-untrusted` is required:
 
 ```sh
-VER=0.1.0-beta.1
+VER=0.2.0
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.apk
 sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 ```
@@ -49,13 +48,13 @@ sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 **Any distro (tarball)**
 
 ```sh
-VER=0.1.0-beta.1
+VER=0.2.0
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.tar.gz
 tar xzf cmkfs_${VER}_linux_amd64.tar.gz
 sudo install -m 0755 cmkfs /usr/local/bin/
 ```
 
-**From source** (Go ≥ 1.22, no cgo):
+**From source** (Go ≥ 1.25, no cgo):
 
 ```sh
 git clone https://github.com/ethanpil/cmkfs
@@ -134,7 +133,7 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 ## Development
 
 Build from source with `CGO_ENABLED=0 go build ./cmd/cmkfs` (see
-[Installation](#installation)). Go ≥ 1.22; the only third-party dependencies
+[Installation](#installation)). Go ≥ 1.25; the only third-party dependencies
 are the Charm TUI modules (bubbletea, bubbles, lipgloss) — everything else is
 the standard library.
 
@@ -154,8 +153,16 @@ go run ./internal/gendemo docs/demo.gif
 
 ## Changelog
 
-v0.1.0-beta.1 is a beta: the automated suites (unit, fuzz, loop-device
-integration) pass in CI, but the manual hardware checklist (real USB
-sticks, live abort testing, terminal-resize scenarios) has not been signed
-off yet. Treat it accordingly — and read the confirm screen before typing
-the device name.
+**v0.2.0** — three new filesystems: FAT32/vfat (`mkfs.fat`), exFAT
+(`mkfs.exfat`, requires exfatprogs), and F2FS (`mkfs.f2fs`). FAT and exFAT
+tools overwrite existing signatures unconditionally (they have no force
+flag), so for those the typed device-name confirmation is the guard; on
+whole-disk FAT targets cmkfs supplies `-I` automatically after
+confirmation. The manual hardware checklist from the beta still has not
+been signed off.
+
+**v0.1.0-beta.1** — first beta: the automated suites (unit, fuzz,
+loop-device integration) pass in CI, but the manual hardware checklist
+(real USB sticks, live abort testing, terminal-resize scenarios) has not
+been signed off yet. Treat it accordingly — and read the confirm screen
+before typing the device name.

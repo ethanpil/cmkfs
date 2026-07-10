@@ -52,7 +52,7 @@ func run() (code int) {
 	showVersion := fs.Bool("version", false, "print version and embedded schema ids, then exit")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "Usage: cmkfs [flags] [device]\n\n")
-		fmt.Fprintf(fs.Output(), "A TUI front-end for mkfs.ext4, mkfs.xfs, and mkfs.btrfs.\n\n")
+		fmt.Fprintf(fs.Output(), "A TUI front-end for mkfs: ext4, XFS, Btrfs, FAT32, exFAT, and F2FS.\n\n")
 		fmt.Fprintf(fs.Output(), "  [device]      optional target, e.g. /dev/sdb1: skips the device list\n\nFlags:\n")
 		fs.PrintDefaults()
 	}

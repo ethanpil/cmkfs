@@ -37,9 +37,9 @@ nfpms:
     maintainer: Ethan Piliavin <ethan@piliavin.com>
     homepage: https://github.com/ethanpil/cmkfs
     description: >-
-      TUI front-end for mkfs.ext4, mkfs.xfs and mkfs.btrfs, in the spirit of
-      cfdisk. Guides device selection, curated options, and safe execution
-      with typed confirmation.
+      TUI front-end for the mkfs family (ext4, XFS, Btrfs, FAT32, exFAT,
+      F2FS), in the spirit of cfdisk. Guides device selection, curated
+      options, and safe execution with typed confirmation.
     dependencies:
       - util-linux
 

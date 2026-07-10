@@ -1,5 +1,5 @@
 # goreleaser v2 config (spec §14): static Linux binaries for amd64 and
-# arm64, tar.gz archives, deb/rpm via nfpm, checksums.
+# arm64, tar.gz archives, deb/rpm/apk via nfpm, checksums.
 version: 2
 
 project_name: cmkfs
@@ -29,7 +29,11 @@ archives:
 
 nfpms:
   - package_name: cmkfs
-    formats: [deb, rpm]
+    formats: [deb, rpm, apk]
+    # Uniform, predictable asset names across every format, e.g.
+    # cmkfs_0.1.0-beta.1_linux_amd64.apk — the README install commands
+    # depend on this exact shape.
+    file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     maintainer: Ethan Piliavin <ethan@piliavin.com>
     homepage: https://github.com/ethanpil/cmkfs
     description: >-

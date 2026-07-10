@@ -4,6 +4,8 @@ A terminal UI front-end for the `mkfs.*` family of filesystem creation
 tools, in the same spirit that `cfdisk` is a TUI front-end for disk
 partitioning.
 
+![cmkfs walkthrough: device list → filesystem picker → options → confirm → result](docs/demo.gif)
+
 cmkfs guides you through selecting a block device, choosing a filesystem
 (ext4, XFS, or Btrfs), configuring a curated set of options with built-in
 help, previewing the exact `mkfs.*` command that will run, and executing it
@@ -13,6 +15,54 @@ cmkfs never implements filesystem creation itself. It is a command generator
 and executor: its entire job is to build a correct argv for the system's
 `mkfs.ext4`, `mkfs.xfs`, or `mkfs.btrfs` binary and run it as a subprocess.
 No shell is ever involved.
+
+## Installation
+
+Pre-built **static** binaries for Linux amd64 and arm64 are attached to every
+[release](https://github.com/ethanpil/cmkfs/releases). In the commands below,
+set `VER` to a published version and swap `amd64` for `arm64` on ARM.
+
+**Debian / Ubuntu (`.deb`)**
+
+```sh
+VER=0.1.0-beta.1
+curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.deb
+sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
+```
+
+**Fedora / RHEL / openSUSE (`.rpm`)**
+
+```sh
+VER=0.1.0-beta.1
+curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.rpm
+sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
+```
+
+**Alpine (`.apk`)** — the package is unsigned, so `--allow-untrusted` is required:
+
+```sh
+VER=0.1.0-beta.1
+curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.apk
+sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
+```
+
+**Any distro (tarball)**
+
+```sh
+VER=0.1.0-beta.1
+curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.tar.gz
+tar xzf cmkfs_${VER}_linux_amd64.tar.gz
+sudo install -m 0755 cmkfs /usr/local/bin/
+```
+
+**From source** (Go ≥ 1.22, no cgo):
+
+```sh
+git clone https://github.com/ethanpil/cmkfs
+cd cmkfs
+CGO_ENABLED=0 go build -o cmkfs ./cmd/cmkfs
+sudo install -m 0755 cmkfs /usr/local/bin/
+```
 
 ## Usage
 
@@ -78,20 +128,25 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 - A single Ctrl+C never kills a running format; a deliberate
   double-Ctrl+C + typed `ABORT` flow always can.
 
-## Building
+## Development
 
-```
-CGO_ENABLED=0 go build ./cmd/cmkfs
-```
-
-Go ≥ 1.22. The only third-party dependencies are the Charm TUI modules
-(bubbletea, bubbles, lipgloss); everything else is the standard library.
+Build from source with `CGO_ENABLED=0 go build ./cmd/cmkfs` (see
+[Installation](#installation)). Go ≥ 1.22; the only third-party dependencies
+are the Charm TUI modules (bubbletea, bubbles, lipgloss) — everything else is
+the standard library.
 
 Run the test suite:
 
 ```
 go test ./...                                   # unit tests, no root needed
 sudo go test -tags integration ./integration/   # loop-device tests, root + Linux
+```
+
+Regenerate the demo GIF at the top of this README (renders the real UI
+against sample devices, no root or real disks needed):
+
+```
+go run ./internal/gendemo docs/demo.gif
 ```
 
 ## Changelog

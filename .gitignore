@@ -27,3 +27,4 @@ go.work.sum
 # AI Stuff
 docs/spec.md
 .claude
+dist/

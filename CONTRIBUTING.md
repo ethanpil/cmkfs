@@ -26,7 +26,12 @@ rule in CI; a violation fails `go test`, which fails the release.
    it" without external docs.
 3. Add golden cases to `internal/cmdgen/cmdgen_test.go` for the new flag's
    emission.
-4. Schema changes (new option, new filesystem) bump the minor version;
+4. New filesystem: verify against the backend's source whether it refuses
+   to overwrite existing signatures. Set `ForceFlag` to its force flag when
+   it does; leave it empty **only** when the backend overwrites
+   unconditionally (nothing catches a forgotten `ForceFlag` at authoring
+   time — the mistake merely fails safe at runtime).
+5. Schema changes (new option, new filesystem) bump the minor version;
    schema fixes bump patch.
 
 ## Dependency policy
@@ -48,8 +53,10 @@ dependency graph is Charm-only.
   there is nothing to inject, and the signature warning plus typed
   confirmation is the only guard; do not assume force gates signatures for
   every filesystem. `WholeDiskFlag` (e.g. mkfs.fat `-I`) is likewise
-  app-controlled, injected when the target is an entire disk
-  (`Report.IsWholeDisk()`).
+  app-controlled, injected when the target is an entire disk or a whole
+  device carrying a partition table (`Report.NeedsWholeDiskFlag()` —
+  dosfstools refuses any device with partitions, not just disks). It is
+  rejected from Extra Arguments the same way the force flag is.
 - `safety.FinalGate` runs immediately before spawn, and its O_EXCL probe is
   probe-and-release — never hold the fd across the spawn.
 - Nothing is ever killed automatically; only the user's double-Ctrl+C +

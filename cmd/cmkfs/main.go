@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -84,10 +85,22 @@ func run() (code int) {
 		return exitEnv
 	}
 
+	// The probes are independent one-shot execs; run them concurrently so
+	// startup pays for the slowest backend, not the sum of all six.
 	backends := map[string]device.Backend{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	for _, s := range schema.Schemas {
-		backends[s.Binary] = device.ProbeBackend(s.Binary)
+		wg.Add(1)
+		go func(bin string) {
+			defer wg.Done()
+			b := device.ProbeBackend(bin)
+			mu.Lock()
+			backends[bin] = b
+			mu.Unlock()
+		}(s.Binary)
 	}
+	wg.Wait()
 
 	sys := safety.System{ProbeExcl: safety.ProbeExclusive}
 

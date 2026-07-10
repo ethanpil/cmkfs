@@ -121,7 +121,7 @@ func runPipeline(t *testing.T, s schema.Schema, values map[string]any, extra []s
 		t.Fatalf("unexpected blockers: %+v", report.Findings)
 	}
 
-	argv, display, err := cmdgen.Build(s, values, extra, loopDev, report.NeedsForce(), report.IsWholeDisk())
+	argv, display, err := cmdgen.Build(s, values, extra, loopDev, report.NeedsForce(), report.NeedsWholeDiskFlag())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

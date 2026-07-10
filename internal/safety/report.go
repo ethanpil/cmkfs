@@ -61,10 +61,14 @@ func (r Report) NeedsForce() bool {
 	return false
 }
 
-// IsWholeDisk reports whether the target is an entire disk (WHOLE_DISK or
-// WHOLE_DISK_BARE): drives schema.WholeDiskFlag injection (spec §9).
-func (r Report) IsWholeDisk() bool {
-	return r.Has("WHOLE_DISK") || r.Has("WHOLE_DISK_BARE")
+// NeedsWholeDiskFlag reports whether schema.WholeDiskFlag must be injected
+// (spec §9): the target is an entire disk, or a whole device carrying a
+// partition table. dosfstools 4.2 refuses any device with partitions or
+// holders (has_children) regardless of its type — a partitioned loop or md
+// array needs -I just like a partitioned disk — while dosfstools ≤4.1
+// refuses bare fixed disks, so both signals are covered.
+func (r Report) NeedsWholeDiskFlag() bool {
+	return r.Has("WHOLE_DISK") || r.Has("WHOLE_DISK_BARE") || r.Has("SIGNATURE_PTABLE")
 }
 
 // HasWarnings reports whether any finding is a Warning (drives the typed

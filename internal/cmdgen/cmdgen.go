@@ -257,6 +257,9 @@ func CheckExtraToken(s schema.Schema, device, tok string) error {
 	if tok == s.ForceFlag {
 		return fmt.Errorf("extra argument must not be the force flag (%s)", s.ForceFlag)
 	}
+	if s.WholeDiskFlag != "" && tok == s.WholeDiskFlag {
+		return fmt.Errorf("extra argument must not be the whole-disk flag (%s)", s.WholeDiskFlag)
+	}
 	return nil
 }
 

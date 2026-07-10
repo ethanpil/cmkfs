@@ -167,6 +167,17 @@ func TestBuildGolden(t *testing.T) {
 			wantDisplay: "mkfs.fat -n EFI -F 32 -i DEADBEEF /dev/sdb1",
 		},
 		{
+			name:     "vfat cluster and sector geometry",
+			schemaID: "vfat",
+			values: map[string]any{
+				"sectors_per_cluster": "8",
+				"sector_size":         "512",
+			},
+			device:      "/dev/sdb1",
+			wantArgv:    []string{"mkfs.fat", "-s", "8", "-S", "512", "/dev/sdb1"},
+			wantDisplay: "mkfs.fat -s 8 -S 512 /dev/sdb1",
+		},
+		{
 			name:        "vfat whole-disk target injects -I",
 			schemaID:    "vfat",
 			device:      "/dev/sdb",
@@ -199,6 +210,14 @@ func TestBuildGolden(t *testing.T) {
 			device:      "/dev/mmcblk0p1",
 			wantArgv:    []string{"mkfs.exfat", "-L", "SDCARD", "-c", "128K", "/dev/mmcblk0p1"},
 			wantDisplay: "mkfs.exfat -L SDCARD -c 128K /dev/mmcblk0p1",
+		},
+		{
+			name:        "exfat boundary alignment",
+			schemaID:    "exfat",
+			values:      map[string]any{"boundary_align": "16M"},
+			device:      "/dev/sdb1",
+			wantArgv:    []string{"mkfs.exfat", "-b", "16M", "/dev/sdb1"},
+			wantDisplay: "mkfs.exfat -b 16M /dev/sdb1",
 		},
 		{
 			name:        "exfat force is a no-op (no signature gate)",
@@ -310,6 +329,7 @@ func TestBuildForceAndWholeDiskFlags(t *testing.T) {
 func TestBuildErrors(t *testing.T) {
 	ext4 := schemaByID(t, "ext4")
 	xfs := schemaByID(t, "xfs")
+	vfat := schemaByID(t, "vfat")
 
 	cases := []struct {
 		name   string
@@ -389,6 +409,12 @@ func TestBuildErrors(t *testing.T) {
 			schema: ext4,
 			extra:  []string{"-F"},
 			want:   "must not be the force flag",
+		},
+		{
+			name:   "guardrail token equals whole-disk flag",
+			schema: vfat,
+			extra:  []string{"-I"},
+			want:   "must not be the whole-disk flag",
 		},
 	}
 

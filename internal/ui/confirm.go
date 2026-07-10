@@ -51,7 +51,7 @@ func (a *App) enterConfirm() (tea.Model, tea.Cmd) {
 
 	a.report = a.fullReport(*a.dev)
 
-	argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, a.report.NeedsForce(), a.report.IsWholeDisk())
+	argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, a.report.NeedsForce(), a.report.NeedsWholeDiskFlag())
 	if err != nil {
 		a.form.footerErr = err.Error()
 		a.screen = ScreenOptionsForm
@@ -76,10 +76,30 @@ func (a *App) enterConfirm() (tea.Model, tea.Cmd) {
 // report; nothing was spawned (spec §10.3 Screen 5).
 func (a *App) reenterConfirmFromGate(report safety.Report) {
 	a.report = report
+	// Refresh the device snapshot so the Pane-2 summary and the next
+	// confirmation's fingerprint reflect the state the gate saw, not the
+	// pre-bounce one.
+	if devs, err := a.cfg.Discover(a.cfg.ShowLoop); err == nil {
+		a.devices = devs
+		a.list.refresh(a)
+		for i := range devs {
+			if devs[i].Path == a.dev.Path {
+				d := devs[i]
+				a.dev = &d
+				break
+			}
+		}
+	}
 	// Rebuild the command: the fresh report may change the force decision,
 	// and the displayed/printed command must always match the shown findings.
-	if argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, report.NeedsForce(), report.IsWholeDisk()); err == nil {
+	if argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, report.NeedsForce(), report.NeedsWholeDiskFlag()); err == nil {
 		a.argv, a.display = argv, display
+	} else {
+		// Unreachable with today's schemas (the same inputs already built
+		// once), but never show a command that mismatches the findings.
+		a.form.footerErr = err.Error()
+		a.screen = ScreenOptionsForm
+		return
 	}
 	ti := textinput.New()
 	ti.Prompt = ""

@@ -24,7 +24,7 @@ set `VER` to a published version and swap `amd64` for `arm64` on ARM.
 **Debian / Ubuntu (`.deb`)**
 
 ```sh
-VER=0.2.0
+VER=0.2.1
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.deb
 sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 ```
@@ -32,7 +32,7 @@ sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 **Fedora / RHEL / openSUSE (`.rpm`)**
 
 ```sh
-VER=0.2.0
+VER=0.2.1
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.rpm
 sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 ```
@@ -40,7 +40,7 @@ sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 **Alpine (`.apk`)** — the package is unsigned, so `--allow-untrusted` is required:
 
 ```sh
-VER=0.2.0
+VER=0.2.1
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.apk
 sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 ```
@@ -48,7 +48,7 @@ sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 **Any distro (tarball)**
 
 ```sh
-VER=0.2.0
+VER=0.2.1
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.tar.gz
 tar xzf cmkfs_${VER}_linux_amd64.tar.gz
 sudo install -m 0755 cmkfs /usr/local/bin/
@@ -152,6 +152,15 @@ go run ./internal/gendemo docs/demo.gif
 ```
 
 ## Changelog
+
+**v0.2.1** — fixes from a post-release review: `-I` for mkfs.fat is now
+supplied for any whole device carrying a partition table (partitioned loop
+devices and md arrays, not only disks); `-I` can no longer be smuggled in
+via Extra Arguments; exFAT labels accept 11 characters (not 11 bytes) and
+F2FS labels up to 512 bytes; the F2FS version probe was removed (mkfs.f2fs
+offers no safe way to print its version, so the permanent "version could
+not be determined" warning was noise); backend probes now run concurrently
+at startup.
 
 **v0.2.0** — three new filesystems: FAT32/vfat (`mkfs.fat`), exFAT
 (`mkfs.exfat`, requires exfatprogs), and F2FS (`mkfs.f2fs`). FAT and exFAT

@@ -241,8 +241,8 @@ var exfat = Schema{
 			Type:        KindString,
 			Default:     "",
 			Flag:        "-L {value}",
-			MaxBytes:    11,
-			Pattern:     `^[^\x00-\x1f]*$`,
+			MaxBytes:    44,
+			Pattern:     `^[^\x00-\x1f]{0,11}$`,
 		},
 		{
 			ID:          "cluster_size",
@@ -297,18 +297,19 @@ var f2fs = Schema{
 	Name:         "F2FS",
 	Description:  "Flash-Friendly File System, log-structured for NAND flash: SD cards, eMMC, and SSDs. The default data partition filesystem on many Android devices.",
 	Binary:       "mkfs.f2fs",
-	ForceFlag:    "-f",     // force overwrite of an existing filesystem
-	MinVersion:   "1.14",
+	ForceFlag:    "-f", // force overwrite of an existing filesystem
+	// No MinVersion: mkfs.f2fs offers no safe way to probe its version (see
+	// internal/device/backend.go), so a floor could never be checked.
 	MinSizeBytes: 52428800, // mkfs.f2fs needs ~50 MiB for its metadata segments
 	Options: []Option{
 		{
 			ID:          "label",
 			Name:        "Volume label",
-			Description: "Human-readable name for the filesystem. Up to 16 bytes.",
+			Description: "Human-readable name for the filesystem. Up to 512 bytes.",
 			Type:        KindString,
 			Default:     "",
 			Flag:        "-l {value}",
-			MaxBytes:    16,
+			MaxBytes:    512,
 			Pattern:     `^[^\x00-\x1f]*$`,
 		},
 	},

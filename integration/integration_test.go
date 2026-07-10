@@ -121,7 +121,7 @@ func runPipeline(t *testing.T, s schema.Schema, values map[string]any, extra []s
 		t.Fatalf("unexpected blockers: %+v", report.Findings)
 	}
 
-	argv, display, err := cmdgen.Build(s, values, extra, loopDev, report.NeedsForce())
+	argv, display, err := cmdgen.Build(s, values, extra, loopDev, report.NeedsForce(), report.IsWholeDisk())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestExtraArgsPassthrough(t *testing.T) {
 	s := schemaByID(t, "ext4")
 
 	// Assert argv placement first (before the device, after schema flags).
-	argv, _, err := cmdgen.Build(s, map[string]any{"label": "x"}, []string{"-E", "nodiscard"}, loop, false)
+	argv, _, err := cmdgen.Build(s, map[string]any{"label": "x"}, []string{"-E", "nodiscard"}, loop, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +326,7 @@ func TestFinalGateRace(t *testing.T) {
 
 	// executor.Run with that gate emits Gate != nil and spawns nothing:
 	// the device is untouched (same UUID).
-	argv, _, err := cmdgen.Build(s, map[string]any{"label": "nope"}, nil, loop, false)
+	argv, _, err := cmdgen.Build(s, map[string]any{"label": "nope"}, nil, loop, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +350,7 @@ func TestAbort(t *testing.T) {
 	requireBinary(t, "mkfs.ext4")
 	loop := makeLoop(t, "8G")
 	s := schemaByID(t, "ext4")
-	argv, _, err := cmdgen.Build(s, map[string]any{}, nil, loop, false)
+	argv, _, err := cmdgen.Build(s, map[string]any{}, nil, loop, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}

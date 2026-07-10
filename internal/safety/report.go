@@ -61,6 +61,12 @@ func (r Report) NeedsForce() bool {
 	return false
 }
 
+// IsWholeDisk reports whether the target is an entire disk (WHOLE_DISK or
+// WHOLE_DISK_BARE): drives schema.WholeDiskFlag injection (spec §9).
+func (r Report) IsWholeDisk() bool {
+	return r.Has("WHOLE_DISK") || r.Has("WHOLE_DISK_BARE")
+}
+
 // HasWarnings reports whether any finding is a Warning (drives the typed
 // confirmation on Screen 4).
 func (r Report) HasWarnings() bool {

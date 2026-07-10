@@ -29,6 +29,7 @@ func TestBuildGolden(t *testing.T) {
 		extra       []string
 		device      string
 		force       bool
+		wholeDisk   bool
 		wantArgv    []string
 		wantDisplay string
 	}{
@@ -164,7 +165,7 @@ func TestBuildGolden(t *testing.T) {
 			if values == nil {
 				values = map[string]any{}
 			}
-			argv, display, err := Build(s, values, tc.extra, tc.device, tc.force)
+			argv, display, err := Build(s, values, tc.extra, tc.device, tc.force, tc.wholeDisk)
 			if err != nil {
 				t.Fatalf("Build: %v", err)
 			}
@@ -175,6 +176,50 @@ func TestBuildGolden(t *testing.T) {
 				t.Errorf("display:\n got %q\nwant %q", display, tc.wantDisplay)
 			}
 		})
+	}
+}
+
+// TestBuildForceAndWholeDiskFlags covers the spec §9 injection semantics for
+// backends without a signature gate (ForceFlag "") and with a whole-disk
+// override flag (WholeDiskFlag), using a synthetic schema.
+func TestBuildForceAndWholeDiskFlags(t *testing.T) {
+	s := schema.Schema{
+		ID:            "t",
+		Binary:        "mkfs.t",
+		ForceFlag:     "",
+		WholeDiskFlag: "-I",
+	}
+	cases := []struct {
+		name             string
+		force, wholeDisk bool
+		wantArgv         []string
+	}{
+		{"force is a no-op without a ForceFlag", true, false, []string{"mkfs.t", "/dev/sdz"}},
+		{"whole-disk flag injected", false, true, []string{"mkfs.t", "-I", "/dev/sdz"}},
+		{"force no-op and whole-disk flag together", true, true, []string{"mkfs.t", "-I", "/dev/sdz"}},
+		{"neither", false, false, []string{"mkfs.t", "/dev/sdz"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			argv, _, err := Build(s, map[string]any{}, nil, "/dev/sdz", tc.force, tc.wholeDisk)
+			if err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+			if !reflect.DeepEqual(argv, tc.wantArgv) {
+				t.Errorf("argv:\n got %q\nwant %q", argv, tc.wantArgv)
+			}
+		})
+	}
+
+	// Force flag comes before the whole-disk flag when both apply.
+	forced := schema.Schema{ID: "t2", Binary: "mkfs.t2", ForceFlag: "-f", WholeDiskFlag: "-I"}
+	argv, _, err := Build(forced, map[string]any{}, nil, "/dev/sdz", true, true)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	want := []string{"mkfs.t2", "-f", "-I", "/dev/sdz"}
+	if !reflect.DeepEqual(argv, want) {
+		t.Errorf("argv:\n got %q\nwant %q", argv, want)
 	}
 }
 
@@ -269,7 +314,7 @@ func TestBuildErrors(t *testing.T) {
 			if values == nil {
 				values = map[string]any{}
 			}
-			argv, _, err := Build(tc.schema, values, tc.extra, "/dev/sdb1", false)
+			argv, _, err := Build(tc.schema, values, tc.extra, "/dev/sdb1", false, false)
 			if err == nil {
 				t.Fatalf("expected error containing %q, got argv %q", tc.want, argv)
 			}
@@ -354,12 +399,12 @@ func TestShellQuote(t *testing.T) {
 func TestBuildDeterminism(t *testing.T) {
 	s := schemaByID(t, "ext4")
 	values := map[string]any{"label": "media", "usage_type": "largefile4"}
-	a1, d1, err := Build(s, values, []string{"-E", "nodiscard"}, "/dev/sdb1", true)
+	a1, d1, err := Build(s, values, []string{"-E", "nodiscard"}, "/dev/sdb1", true, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 50; i++ {
-		a2, d2, err := Build(s, values, []string{"-E", "nodiscard"}, "/dev/sdb1", true)
+		a2, d2, err := Build(s, values, []string{"-E", "nodiscard"}, "/dev/sdb1", true, false)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -43,7 +43,13 @@ dependency graph is Charm-only.
   command anywhere in the execution path, and no shell, ever.
 - The force flag (`-F`/`-f`) is app-controlled, never user-facing: it is
   injected only when the safety flow confirmed an overwrite of detected
-  signatures (`Report.NeedsForce()`).
+  signatures (`Report.NeedsForce()`). A schema with `ForceFlag: ""` means
+  the backend overwrites signatures unconditionally (mkfs.fat, mkfs.exfat) —
+  there is nothing to inject, and the signature warning plus typed
+  confirmation is the only guard; do not assume force gates signatures for
+  every filesystem. `WholeDiskFlag` (e.g. mkfs.fat `-I`) is likewise
+  app-controlled, injected when the target is an entire disk
+  (`Report.IsWholeDisk()`).
 - `safety.FinalGate` runs immediately before spawn, and its O_EXCL probe is
   probe-and-release — never hold the fd across the spawn.
 - Nothing is ever killed automatically; only the user's double-Ctrl+C +

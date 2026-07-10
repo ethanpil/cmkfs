@@ -20,7 +20,8 @@ const (
 type Schema struct {
 	ID, Name, Description string
 	Binary                string
-	ForceFlag             string
+	ForceFlag             string // "" when the backend overwrites signatures unconditionally (spec §9)
+	WholeDiskFlag         string // injected when the target is a whole disk, e.g. mkfs.fat -I; "" for most
 	MinVersion            string // informational; soft warning only (spec §8.3)
 	MinSizeBytes          int64
 	Options               []Option

@@ -51,7 +51,7 @@ func (a *App) enterConfirm() (tea.Model, tea.Cmd) {
 
 	a.report = a.fullReport(*a.dev)
 
-	argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, a.report.NeedsForce())
+	argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, a.report.NeedsForce(), a.report.IsWholeDisk())
 	if err != nil {
 		a.form.footerErr = err.Error()
 		a.screen = ScreenOptionsForm
@@ -78,7 +78,7 @@ func (a *App) reenterConfirmFromGate(report safety.Report) {
 	a.report = report
 	// Rebuild the command: the fresh report may change the force decision,
 	// and the displayed/printed command must always match the shown findings.
-	if argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, report.NeedsForce()); err == nil {
+	if argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, report.NeedsForce(), report.IsWholeDisk()); err == nil {
 		a.argv, a.display = argv, display
 	}
 	ti := textinput.New()

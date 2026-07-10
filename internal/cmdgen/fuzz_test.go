@@ -15,15 +15,15 @@ import (
 // on error, argv is nil.
 func FuzzBuild(f *testing.F) {
 	// Seed corpus: representative values across kinds, extras, and edge inputs.
-	f.Add("ext4", "media", "largefile4", int64(0), true, "64k", int64(3), "-E", "nodiscard", "/dev/loop9", false)
-	f.Add("xfs", "data", "auto", int64(-1), true, "512k", int64(2), "", "", "/dev/sdb1", true)
-	f.Add("btrfs", "my disk", "dup", int64(5), false, "", int64(0), "--mixed", "", "/dev/nvme0n1p2", false)
-	f.Add("ext4", "", "auto", int64(-1), true, "", int64(0), "", "", "/dev/loop0", true)
-	f.Add("ext4", "{value}", "small", int64(50), false, "1g", int64(1024), "-F", "/dev/sda", "/dev/sda", true)
-	f.Add("xfs", "it's", "huge", int64(9999), true, "0", int64(-1), " ", "a\nb", "/dev/md0", false)
+	f.Add("ext4", "media", "largefile4", int64(0), true, "64k", int64(3), "-E", "nodiscard", "/dev/loop9", false, false)
+	f.Add("xfs", "data", "auto", int64(-1), true, "512k", int64(2), "", "", "/dev/sdb1", true, false)
+	f.Add("btrfs", "my disk", "dup", int64(5), false, "", int64(0), "--mixed", "", "/dev/nvme0n1p2", false, true)
+	f.Add("ext4", "", "auto", int64(-1), true, "", int64(0), "", "", "/dev/loop0", true, true)
+	f.Add("ext4", "{value}", "small", int64(50), false, "1g", int64(1024), "-F", "/dev/sda", "/dev/sda", true, false)
+	f.Add("xfs", "it's", "huge", int64(9999), true, "0", int64(-1), " ", "a\nb", "/dev/md0", false, true)
 
 	f.Fuzz(func(t *testing.T, schemaID, label, usage string, resInt int64, boolVal bool,
-		sizeVal string, intVal int64, extra1, extra2, device string, force bool) {
+		sizeVal string, intVal int64, extra1, extra2, device string, force, wholeDisk bool) {
 
 		var s schema.Schema
 		found := false
@@ -62,7 +62,7 @@ func FuzzBuild(f *testing.F) {
 			extra = append(extra, extra2)
 		}
 
-		argv, display, err := Build(s, values, extra, device, force)
+		argv, display, err := Build(s, values, extra, device, force, wholeDisk)
 		if err != nil {
 			if argv != nil {
 				t.Fatalf("argv must be nil on error, got %q (err %v)", argv, err)
@@ -102,15 +102,22 @@ func FuzzBuild(f *testing.F) {
 		if devCount != 1 {
 			t.Fatalf("device appears %d times in %q", devCount, argv)
 		}
-		forceFields := strings.Fields(s.ForceFlag)
+		// Force fields (iff force and the schema has a ForceFlag), then
+		// whole-disk fields (iff wholeDisk and the schema has a
+		// WholeDiskFlag), immediately after argv[0].
+		var wantPrefix []string
 		if force {
-			if len(argv) < 1+len(forceFields)+1 {
-				t.Fatalf("force flag missing: %q", argv)
-			}
-			for i, ff := range forceFields {
-				if argv[1+i] != ff {
-					t.Fatalf("force flag not injected after argv[0]: %q", argv)
-				}
+			wantPrefix = append(wantPrefix, strings.Fields(s.ForceFlag)...)
+		}
+		if wholeDisk {
+			wantPrefix = append(wantPrefix, strings.Fields(s.WholeDiskFlag)...)
+		}
+		if len(argv) < 1+len(wantPrefix)+1 {
+			t.Fatalf("injected flags missing: %q", argv)
+		}
+		for i, ff := range wantPrefix {
+			if argv[1+i] != ff {
+				t.Fatalf("injected flags not in position after argv[0]: %q, want prefix %q", argv, wantPrefix)
 			}
 		}
 		if display == "" {

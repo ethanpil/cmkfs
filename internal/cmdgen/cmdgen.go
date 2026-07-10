@@ -261,11 +261,14 @@ func CheckExtraToken(s schema.Schema, device, tok string) error {
 }
 
 // Build returns the exec argv (argv[0] = schema.Binary) and a display string.
-// force injects schema.ForceFlag immediately after argv[0]. extra carries
+// force injects schema.ForceFlag immediately after argv[0]; an empty
+// ForceFlag means the backend has no signature gate and force is a no-op —
+// the safety layer's typed confirmation is the guard (spec §9). wholeDisk
+// injects schema.WholeDiskFlag when set (e.g. mkfs.fat -I). extra carries
 // the Extra Arguments list (spec §10.3): each element is already exactly one
 // argv token, entered as such by the user — there is no tokenizer in cmkfs,
 // by design. Pass nil when the list is empty.
-func Build(s schema.Schema, values map[string]any, extra []string, device string, force bool) (argv []string, display string, err error) {
+func Build(s schema.Schema, values map[string]any, extra []string, device string, force, wholeDisk bool) (argv []string, display string, err error) {
 	if s.Binary == "" {
 		return nil, "", fmt.Errorf("schema %s has no binary", s.ID)
 	}
@@ -277,11 +280,11 @@ func Build(s schema.Schema, values map[string]any, extra []string, device string
 	}
 
 	argv = []string{s.Binary}
-	if force {
-		if s.ForceFlag == "" {
-			return nil, "", fmt.Errorf("schema %s has no force flag", s.ID)
-		}
+	if force && s.ForceFlag != "" {
 		argv = append(argv, strings.Fields(s.ForceFlag)...)
+	}
+	if wholeDisk && s.WholeDiskFlag != "" {
+		argv = append(argv, strings.Fields(s.WholeDiskFlag)...)
 	}
 
 	// Options in schema order.

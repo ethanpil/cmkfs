@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/executor"
@@ -594,6 +595,51 @@ func TestResultNewRunResetsSelections(t *testing.T) {
 	}
 	if len(a.extra) != 0 {
 		t.Fatalf("extra args must be cleared, got %v", a.extra)
+	}
+}
+
+// TestViewsFitWidth: the renderer truncates lines wider than the terminal,
+// so every screen must wrap its content to the window width — the picker
+// descriptions and soft version warnings once overflowed 80-column consoles.
+func TestViewsFitWidth(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	a.width, a.height = 80, 24
+	// Exercise the wrapped install-hint reason and a soft version warning.
+	delete(a.cfg.Backends, "mkfs.exfat")
+	a.cfg.Backends["mkfs.fat"] = device.Backend{Binary: "mkfs.fat", Path: "/sbin/mkfs.fat"}
+
+	checkFit := func(context string) {
+		t.Helper()
+		for _, line := range strings.Split(a.View(), "\n") {
+			if w := lipgloss.Width(line); w > a.width {
+				t.Errorf("%s: line is %d columns wide, window is %d:\n%q", context, w, a.width, line)
+			}
+		}
+	}
+
+	press(a, "down", "enter") // select the device, land on the picker
+	for i, s := range a.cfg.Schemas {
+		a.picker.cursor = i
+		checkFit("picker on " + s.ID)
+	}
+
+	for _, s := range a.cfg.Schemas {
+		fs := s
+		a.fs = &fs
+		a.form = newFormState(a)
+		a.screen = ScreenOptionsForm
+		for i := range a.formTargets() {
+			a.form.focus = i
+			checkFit(s.ID + " form")
+		}
+		a.form.advancedOpen = true
+		checkFit(s.ID + " form advanced")
+		a.form.advancedOpen = false
+		for _, o := range fs.Options {
+			a.form.overlayOpt = o.ID
+			checkFit(s.ID + " overlay " + o.ID)
+		}
+		a.form.overlayOpt = ""
 	}
 }
 

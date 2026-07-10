@@ -41,6 +41,7 @@ type Option struct {
 	Min, Max                        *int64
 	Pattern                         string
 	MaxBytes                        int
+	Placeholder                     string // dim format/default hint shown in an empty text field
 	Conflicts                       []string
 	Requires                        []string
 	EmitAs                          string

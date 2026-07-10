@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ethanpil/cmkfs/internal/cmdgen"
 	"github.com/ethanpil/cmkfs/internal/schema"
@@ -66,6 +67,10 @@ func newFormState(a *App) formState {
 			ti := textinput.New()
 			ti.Prompt = ""
 			ti.CharLimit = 256
+			if o.MaxBytes > ti.CharLimit {
+				ti.CharLimit = o.MaxBytes
+			}
+			ti.Placeholder = o.Placeholder
 			if o.Type == schema.KindInt {
 				if d := o.Default.(int64); o.Omit == nil || d != o.Omit.(int64) {
 					ti.SetValue(strconv.FormatInt(d, 10))
@@ -412,7 +417,11 @@ func (a *App) viewOptionsForm() string {
 				ti.Blur()
 				raw := ti.Value()
 				if raw == "" {
-					raw = styleDim.Render("(backend default)")
+					hint := o.Placeholder
+					if hint == "" {
+						hint = "(backend default)"
+					}
+					raw = styleDim.Render(hint)
 				}
 				val = raw
 			}
@@ -464,7 +473,10 @@ func (a *App) viewOptionsForm() string {
 			}
 			b.WriteString(row + "\n")
 		}
-		b.WriteString(styleHelp.Render("  Each entry is exactly one argv token: -E nodiscard is TWO tokens, -E then nodiscard.\n  Enter add · d remove · Shift+↑/↓ reorder. Routinely need a flag? Please file an issue so it can be added properly.") + "\n")
+		extraHelp := "Each entry is exactly one argv token: -E nodiscard is TWO tokens, -E then nodiscard.\n" +
+			"Enter add · d remove · Shift+↑/↓ reorder. Routinely need a flag? Please file an issue so it can be added properly."
+		b.WriteString(styleHelp.Render("  "+strings.ReplaceAll(
+			wordWrap(extraHelp, a.width-4), "\n", "\n  ")) + "\n")
 	}
 
 	// Continue action.
@@ -487,10 +499,10 @@ func (a *App) viewOptionsForm() string {
 	}
 
 	if f.footerErr != "" {
-		b.WriteString(styleDanger.Render(f.footerErr) + "\n")
+		b.WriteString(styleDanger.Render(wordWrap(f.footerErr, a.width-2)) + "\n")
 	} else if cur.kind == ftOption {
 		if inv := f.invalid[cur.opt]; inv != "" {
-			b.WriteString(styleDanger.Render(inv) + "\n")
+			b.WriteString(styleDanger.Render(wordWrap(inv, a.width-2)) + "\n")
 		}
 	}
 	b.WriteString(styleHelp.Render("↑/↓ move · h extended help · a advanced · Tab/c continue · Esc back · ? keys"))
@@ -510,9 +522,18 @@ func (a *App) viewLongHelpOverlay(id string) string {
 	b.WriteString(wordWrap(text, a.width-4) + "\n\n")
 	if o.Type == schema.KindEnum {
 		b.WriteString(styleHeader.Render("Choices:") + "\n")
+		labelW := 14
 		for _, v := range o.Values {
-			line := fmt.Sprintf("  %-14s %s", v.Label, v.Help)
-			b.WriteString(line + "\n")
+			if w := lipgloss.Width(v.Label); w > labelW {
+				labelW = w
+			}
+		}
+		col := labelW + 3 // "  " + label column + " "
+		for _, v := range o.Values {
+			help := strings.ReplaceAll(wordWrap(v.Help, a.width-col-1),
+				"\n", "\n"+strings.Repeat(" ", col))
+			pad := strings.Repeat(" ", labelW-lipgloss.Width(v.Label))
+			b.WriteString("  " + v.Label + pad + " " + help + "\n")
 		}
 		b.WriteString("\n")
 	}

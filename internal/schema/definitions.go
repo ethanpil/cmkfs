@@ -24,6 +24,7 @@ var ext4 = Schema{
 			Flag:        "-L {value}",
 			MaxBytes:    16,
 			Pattern:     `^[^\x00-\x1f]*$`,
+			Placeholder: "(none)",
 		},
 		{
 			ID:          "uuid",
@@ -33,6 +34,7 @@ var ext4 = Schema{
 			Default:     "",
 			Flag:        "-U {value}",
 			Pattern:     `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+			Placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
 		},
 		{
 			ID:          "block_size",
@@ -43,7 +45,7 @@ var ext4 = Schema{
 			Omit:        "auto",
 			Flag:        "-b {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)", Help: "mke2fs chooses based on device size."},
+				{Value: "auto", Label: "Auto (4096)", Help: "mke2fs chooses based on device size; 4 KiB on anything modern."},
 				{Value: "1024", Label: "1 KiB", Help: "Small files on small filesystems."},
 				{Value: "2048", Label: "2 KiB"},
 				{Value: "4096", Label: "4 KiB", Help: "Standard for virtually all modern disks."},
@@ -73,7 +75,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 			Flag:      "-T {value}",
 			Conflicts: []string{"bytes_per_inode", "inode_size"},
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)", Help: "mke2fs picks small/default/big/huge by device size."},
+				{Value: "auto", Label: "Auto (by device size)", Help: "mke2fs picks small/default/big/huge by device size."},
 				{Value: "small", Label: "small — many tiny files", Help: "1 KiB blocks, one inode per 4 KiB."},
 				{Value: "largefile", Label: "largefile — 1 MiB/inode", Help: "One inode per 1 MiB. Fewer inodes, faster mkfs/fsck, more usable space."},
 				{Value: "largefile4", Label: "largefile4 — 4 MiB/inode", Help: "One inode per 4 MiB. For volumes of very large files (media, backups, VM images)."},
@@ -92,6 +94,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 			Min:         i64(1024),
 			Max:         i64(67108864),
 			Conflicts:   []string{"usage_type"},
+			Placeholder: "16384",
 		},
 		{
 			ID:          "inode_size",
@@ -103,7 +106,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 			Flag:        "-I {value}",
 			Conflicts:   []string{"usage_type"},
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)"},
+				{Value: "auto", Label: "Auto (256)"},
 				{Value: "128", Label: "128 bytes", Help: "Legacy. Breaks y2038 timestamps. Avoid."},
 				{Value: "256", Label: "256 bytes", Help: "Modern default."},
 				{Value: "512", Label: "512 bytes", Help: "Extra room for extended attributes."},
@@ -120,6 +123,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 			Flag:        "-m {value}",
 			Min:         i64(0),
 			Max:         i64(50),
+			Placeholder: "5",
 		},
 		{
 			ID:          "journal",
@@ -135,7 +139,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 var vfat = Schema{
 	ID:            "vfat",
 	Name:          "FAT32 (vfat)",
-	Description:   "FAT filesystem (FAT12/16/32). Readable everywhere — firmware, cameras, EFI system partitions, small USB media. No permissions; 4 GiB max file size.",
+	Description:   "The universally readable FAT filesystem — firmware, cameras, EFI partitions, USB media. 4 GiB max file size.",
 	Binary:        "mkfs.fat",
 	ForceFlag:     "",   // mkfs.fat overwrites signatures unconditionally; see spec §9
 	WholeDiskFlag: "-I", // mkfs.fat refuses entire-disk targets without it
@@ -150,6 +154,7 @@ var vfat = Schema{
 			Flag:        "-n {value}",
 			MaxBytes:    11,
 			Pattern:     `^[A-Z0-9_\- ]*$`,
+			Placeholder: "(none)",
 		},
 		{
 			ID:          "fat_size",
@@ -172,7 +177,7 @@ cannot address the device with the available cluster sizes.`,
 			Omit:    "auto",
 			Flag:    "-F {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)", Help: "mkfs.fat picks 12/16/32 by device size."},
+				{Value: "auto", Label: "Auto (by device size)", Help: "mkfs.fat picks 12/16/32 by device size."},
 				{Value: "12", Label: "FAT12", Help: "Tiny media only (up to a few MiB)."},
 				{Value: "16", Label: "FAT16", Help: "Small media up to ~2 GiB; expected by some embedded firmware."},
 				{Value: "32", Label: "FAT32", Help: "Standard for modern media and EFI system partitions."},
@@ -187,7 +192,7 @@ cannot address the device with the available cluster sizes.`,
 			Omit:        "auto",
 			Flag:        "-s {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)"},
+				{Value: "auto", Label: "Auto (by device size)"},
 				{Value: "1", Label: "1 sector"},
 				{Value: "2", Label: "2 sectors"},
 				{Value: "4", Label: "4 sectors"},
@@ -222,6 +227,7 @@ cannot address the device with the available cluster sizes.`,
 			Default:     "",
 			Flag:        "-i {value}",
 			Pattern:     `^[0-9a-fA-F]{8}$`,
+			Placeholder: "xxxxxxxx",
 		},
 	},
 }
@@ -229,7 +235,7 @@ cannot address the device with the available cluster sizes.`,
 var exfat = Schema{
 	ID:          "exfat",
 	Name:        "exFAT",
-	Description: "Extended FAT for large cross-platform media: SDXC cards and external drives with files over FAT32's 4 GiB limit. No permissions or journaling.",
+	Description: "Extended FAT for large cross-platform media: big SD cards and external drives, files over 4 GiB.",
 	Binary:      "mkfs.exfat",
 	ForceFlag:   "", // mkfs.exfat overwrites signatures unconditionally; see spec §9
 	MinVersion:  "1.1",
@@ -243,6 +249,7 @@ var exfat = Schema{
 			Flag:        "-L {value}",
 			MaxBytes:    44,
 			Pattern:     `^[^\x00-\x1f]{0,11}$`,
+			Placeholder: "(none)",
 		},
 		{
 			ID:          "cluster_size",
@@ -262,7 +269,7 @@ where per-file waste matters. When unsure, leave on Auto.`,
 			Omit:    "auto",
 			Flag:    "-c {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)", Help: "Scales with device size; matches SD Association recommendations."},
+				{Value: "auto", Label: "Auto (by device size)", Help: "Scales with device size; matches SD Association recommendations."},
 				{Value: "4K", Label: "4 KiB", Help: "Least waste for many small files."},
 				{Value: "8K", Label: "8 KiB"},
 				{Value: "16K", Label: "16 KiB"},
@@ -283,7 +290,7 @@ where per-file waste matters. When unsure, leave on Auto.`,
 			Omit:        "auto",
 			Flag:        "-b {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default: 1 MiB)"},
+				{Value: "auto", Label: "Auto (1 MiB)"},
 				{Value: "1M", Label: "1 MiB"},
 				{Value: "4M", Label: "4 MiB"},
 				{Value: "16M", Label: "16 MiB", Help: "Typical erase-block boundary on larger SD cards."},
@@ -295,7 +302,7 @@ where per-file waste matters. When unsure, leave on Auto.`,
 var f2fs = Schema{
 	ID:           "f2fs",
 	Name:         "F2FS",
-	Description:  "Flash-Friendly File System, log-structured for NAND flash: SD cards, eMMC, and SSDs. The default data partition filesystem on many Android devices.",
+	Description:  "Log-structured filesystem for NAND flash: SD cards, eMMC, SSDs. Android's data filesystem.",
 	Binary:       "mkfs.f2fs",
 	ForceFlag:    "-f", // force overwrite of an existing filesystem
 	// No MinVersion: mkfs.f2fs offers no safe way to probe its version (see
@@ -311,6 +318,7 @@ var f2fs = Schema{
 			Flag:        "-l {value}",
 			MaxBytes:    512,
 			Pattern:     `^[^\x00-\x1f]*$`,
+			Placeholder: "(none)",
 		},
 	},
 }
@@ -333,6 +341,7 @@ var xfs = Schema{
 			Flag:        "-L {value}",
 			MaxBytes:    12,
 			Pattern:     `^[^\x00-\x1f ]*$`,
+			Placeholder: "(none)",
 		},
 		{
 			ID:          "uuid",
@@ -342,6 +351,7 @@ var xfs = Schema{
 			Default:     "",
 			Flag:        "-m uuid={value}",
 			Pattern:     `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+			Placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
 		},
 		{
 			ID:          "block_size",
@@ -352,7 +362,7 @@ var xfs = Schema{
 			Omit:        "auto",
 			Flag:        "-b size={value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default: 4 KiB)"},
+				{Value: "auto", Label: "Auto (4096)"},
 				{Value: "1024", Label: "1 KiB"},
 				{Value: "2048", Label: "2 KiB"},
 				{Value: "4096", Label: "4 KiB", Help: "Default."},
@@ -367,7 +377,7 @@ var xfs = Schema{
 			Omit:        "auto",
 			Flag:        "-i size={value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default: 512)"},
+				{Value: "auto", Label: "Auto (512)"},
 				{Value: "512", Label: "512 bytes", Help: "Default."},
 				{Value: "1024", Label: "1024 bytes"},
 				{Value: "2048", Label: "2048 bytes"},
@@ -427,6 +437,7 @@ var btrfs = Schema{
 			Flag:        "-L {value}",
 			MaxBytes:    255,
 			Pattern:     `^[^\x00-\x1f]*$`,
+			Placeholder: "(none)",
 		},
 		{
 			ID:          "uuid",
@@ -436,6 +447,7 @@ var btrfs = Schema{
 			Default:     "",
 			Flag:        "-U {value}",
 			Pattern:     `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`,
+			Placeholder: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
 		},
 		{
 			ID:          "data_profile",
@@ -460,7 +472,7 @@ var btrfs = Schema{
 			Omit:        "auto",
 			Flag:        "-m {value}",
 			Values: []EnumValue{
-				{Value: "auto", Label: "Auto (backend default)", Help: "dup on most single devices, single on some SSD setups."},
+				{Value: "auto", Label: "Auto (dup on most devices)", Help: "dup on most single devices, single on some SSD setups."},
 				{Value: "single", Label: "single", Help: "One copy of metadata. Slightly more space/speed, less resilient."},
 				{Value: "dup", Label: "dup", Help: "Two copies of metadata. Recommended."},
 			},

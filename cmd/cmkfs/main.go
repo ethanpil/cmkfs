@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,6 +46,16 @@ func run() (code int) {
 			code = exitInternal
 		}
 	}()
+
+	// QEMU/UTM and other serial consoles advertise TERMs whose terminfo has
+	// no color capability (vt100/vt220/...), so the styles silently degrade
+	// to monochrome even though the emulator renders color fine. Force basic
+	// ANSI there; an explicit NO_COLOR or CLICOLOR_FORCE from the user always
+	// wins (both are honored by the style engine).
+	if strings.HasPrefix(os.Getenv("TERM"), "vt") &&
+		os.Getenv("NO_COLOR") == "" && os.Getenv("CLICOLOR_FORCE") == "" {
+		os.Setenv("CLICOLOR_FORCE", "1")
+	}
 
 	fs := flag.NewFlagSet("cmkfs", flag.ExitOnError) // flag exits 2 on bad flags
 	printCmd := fs.Bool("print", false, "after Confirm, print the command instead of executing")

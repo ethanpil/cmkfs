@@ -18,13 +18,15 @@ and executor: its entire job is to build a correct argv for the system's
 ## Installation
 
 Pre-built **static** binaries for Linux amd64 and arm64 are attached to every
-[release](https://github.com/ethanpil/cmkfs/releases). In the commands below,
-set `VER` to a published version and swap `amd64` for `arm64` on ARM.
+[release](https://github.com/ethanpil/cmkfs/releases). Each block below is
+copy-paste ready: the first line resolves the latest release version
+automatically (set `VER` by hand instead to pin a specific one), and swap
+`amd64` for `arm64` on ARM.
 
 **Debian / Ubuntu (`.deb`)**
 
 ```sh
-VER=0.2.1
+VER=$(curl -fsSL https://api.github.com/repos/ethanpil/cmkfs/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.deb
 sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 ```
@@ -32,7 +34,7 @@ sudo dpkg -i cmkfs_${VER}_linux_amd64.deb
 **Fedora / RHEL / openSUSE (`.rpm`)**
 
 ```sh
-VER=0.2.1
+VER=$(curl -fsSL https://api.github.com/repos/ethanpil/cmkfs/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.rpm
 sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 ```
@@ -40,7 +42,7 @@ sudo rpm -i cmkfs_${VER}_linux_amd64.rpm
 **Alpine (`.apk`)** — the package is unsigned, so `--allow-untrusted` is required:
 
 ```sh
-VER=0.2.1
+VER=$(curl -fsSL https://api.github.com/repos/ethanpil/cmkfs/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.apk
 sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 ```
@@ -48,7 +50,7 @@ sudo apk add --allow-untrusted ./cmkfs_${VER}_linux_amd64.apk
 **Any distro (tarball)**
 
 ```sh
-VER=0.2.1
+VER=$(curl -fsSL https://api.github.com/repos/ethanpil/cmkfs/releases/latest | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p')
 curl -LO https://github.com/ethanpil/cmkfs/releases/download/v$VER/cmkfs_${VER}_linux_amd64.tar.gz
 tar xzf cmkfs_${VER}_linux_amd64.tar.gz
 sudo install -m 0755 cmkfs /usr/local/bin/
@@ -87,7 +89,10 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
   (dosfstools), `mkfs.exfat` (exfatprogs — the modern kernel-exFAT tools,
   not the legacy fuse exfat-utils), `mkfs.f2fs` (f2fs-tools). Missing
   backends are simply greyed out in the picker.
-- A terminal of at least 80x24.
+- A terminal of at least 80x24. Serial/VM consoles that advertise a
+  colorless `TERM` (vt100/vt220, common under QEMU/UTM) get basic colors
+  forced automatically; `NO_COLOR=1` disables colors anywhere and
+  `CLICOLOR_FORCE=1` forces them anywhere.
 
 ## Keys
 

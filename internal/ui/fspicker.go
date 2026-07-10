@@ -78,18 +78,31 @@ func (a *App) viewFSPicker() string {
 	if a.dev != nil {
 		fmt.Fprintf(&b, "Target: %s (%s)\n\n", styleHeader.Render(a.dev.Path), device.HumanSizeCompact(a.dev.SizeBytes))
 	}
+	// The renderer truncates at the window width, so descriptions and
+	// reasons are wrapped with a hanging indent under the name column.
+	const nameCol = 15 // "  " + %-12s + " "
+	indent := strings.Repeat(" ", nameCol)
 	for i, s := range a.cfg.Schemas {
 		reason := a.pickerDisabledReason(s)
-		line := fmt.Sprintf("  %-8s %s", s.Name, s.Description)
+		desc := strings.Split(wordWrap(s.Description, a.width-nameCol-1), "\n")
+		line := fmt.Sprintf("  %-12s %s", s.Name, desc[0])
+		for _, l := range desc[1:] {
+			line += "\n" + indent + l
+		}
+		var reasonLine string
+		if reason != "" {
+			reasonLine = indent + strings.ReplaceAll(
+				wordWrap(reason, a.width-nameCol-1), "\n", "\n"+indent)
+		}
 		switch {
 		case i == a.picker.cursor && reason == "":
 			b.WriteString(styleSelected.Render(line) + "\n")
 		case i == a.picker.cursor:
 			b.WriteString(styleSelected.Render(line) + "\n")
-			b.WriteString("           " + styleDim.Render(reason) + "\n")
+			b.WriteString(styleDim.Render(reasonLine) + "\n")
 		case reason != "":
 			b.WriteString(styleDim.Render(line) + "\n")
-			b.WriteString("           " + styleDim.Render(reason) + "\n")
+			b.WriteString(styleDim.Render(reasonLine) + "\n")
 		default:
 			b.WriteString(line + "\n")
 		}
@@ -98,7 +111,7 @@ func (a *App) viewFSPicker() string {
 	// Persistent soft version warnings (spec §8.3).
 	for _, s := range a.cfg.Schemas {
 		if w := versionWarning(s, a.cfg.Backends); w != "" {
-			b.WriteString(styleWarn.Render(w) + "\n")
+			b.WriteString(styleWarn.Render(wordWrap(w, a.width-2)) + "\n")
 		}
 	}
 	b.WriteString(styleHelp.Render("↑/↓ move · Enter select · Esc back · ? keys · q quit"))

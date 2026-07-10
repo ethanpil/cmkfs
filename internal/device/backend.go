@@ -32,6 +32,7 @@ var versionProbes = map[string]struct {
 	// The regex matches exfatprogs only; the legacy fuse exfat-utils
 	// mkfs.exfat (incompatible flags) yields "" and the soft version warning.
 	"mkfs.exfat": {[]string{"-V"}, regexp.MustCompile(`exfatprogs version : (\d+(?:\.\d+)*)`)},
+	"mkfs.f2fs":  {[]string{"-V"}, regexp.MustCompile(`mkfs\.f2fs Ver:\s*(\d+(?:\.\d+)*)`)},
 }
 
 // ParseVersionBanner extracts the version from a backend's version banner.

@@ -5,7 +5,7 @@ package schema
 // conditionals, no arithmetic (i64 is the one permitted helper, defined in
 // schema.go).
 
-var Schemas = []Schema{ext4, xfs, btrfs, vfat, exfat}
+var Schemas = []Schema{ext4, xfs, btrfs, vfat, exfat, f2fs}
 
 var ext4 = Schema{
 	ID:          "ext4",
@@ -288,6 +288,28 @@ where per-file waste matters. When unsure, leave on Auto.`,
 				{Value: "4M", Label: "4 MiB"},
 				{Value: "16M", Label: "16 MiB", Help: "Typical erase-block boundary on larger SD cards."},
 			},
+		},
+	},
+}
+
+var f2fs = Schema{
+	ID:           "f2fs",
+	Name:         "F2FS",
+	Description:  "Flash-Friendly File System, log-structured for NAND flash: SD cards, eMMC, and SSDs. The default data partition filesystem on many Android devices.",
+	Binary:       "mkfs.f2fs",
+	ForceFlag:    "-f",     // force overwrite of an existing filesystem
+	MinVersion:   "1.14",
+	MinSizeBytes: 52428800, // mkfs.f2fs needs ~50 MiB for its metadata segments
+	Options: []Option{
+		{
+			ID:          "label",
+			Name:        "Volume label",
+			Description: "Human-readable name for the filesystem. Up to 16 bytes.",
+			Type:        KindString,
+			Default:     "",
+			Flag:        "-l {value}",
+			MaxBytes:    16,
+			Pattern:     `^[^\x00-\x1f]*$`,
 		},
 	},
 }

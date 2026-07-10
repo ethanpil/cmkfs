@@ -155,6 +155,7 @@ func TestPipelineFormatEachFilesystem(t *testing.T) {
 		{"btrfs", "itbtrfs", "btrfs"},
 		{"vfat", "ITVFAT", "vfat"}, // FAT labels are uppercase-only
 		{"exfat", "itexfat", "exfat"},
+		{"f2fs", "itf2fs", "f2fs"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.schemaID, func(t *testing.T) {

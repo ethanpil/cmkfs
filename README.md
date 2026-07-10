@@ -86,8 +86,8 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 - Whichever backends you want to use: `mkfs.ext4` (e2fsprogs),
   `mkfs.xfs` (xfsprogs), `mkfs.btrfs` (btrfs-progs), `mkfs.fat`
   (dosfstools), `mkfs.exfat` (exfatprogs — the modern kernel-exFAT tools,
-  not the legacy fuse exfat-utils). Missing backends are simply greyed out
-  in the picker.
+  not the legacy fuse exfat-utils), `mkfs.f2fs` (f2fs-tools). Missing
+  backends are simply greyed out in the picker.
 - A terminal of at least 80x24.
 
 ## Keys

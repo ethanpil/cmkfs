@@ -148,18 +148,19 @@ func runPipeline(t *testing.T, s schema.Schema, values map[string]any, extra []s
 
 func TestPipelineFormatEachFilesystem(t *testing.T) {
 	cases := []struct {
-		schemaID, wantFSType string
+		schemaID, label, wantFSType string
 	}{
-		{"ext4", "ext4"},
-		{"xfs", "xfs"},
-		{"btrfs", "btrfs"},
+		{"ext4", "itext4", "ext4"},
+		{"xfs", "itxfs", "xfs"},
+		{"btrfs", "itbtrfs", "btrfs"},
+		{"vfat", "ITVFAT", "vfat"}, // FAT labels are uppercase-only
 	}
 	for _, tc := range cases {
 		t.Run(tc.schemaID, func(t *testing.T) {
 			s := schemaByID(t, tc.schemaID)
 			requireBinary(t, s.Binary)
 			loop := makeLoop(t, "2G")
-			label := "it" + tc.schemaID
+			label := tc.label
 
 			done := runPipeline(t, s, map[string]any{"label": label}, nil, loop)
 			if done.Exit != 0 || done.Aborted || done.Gate != nil {

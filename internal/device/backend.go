@@ -26,6 +26,9 @@ var versionProbes = map[string]struct {
 	"mkfs.ext4":  {[]string{"-V"}, regexp.MustCompile(`mke2fs (\d+(?:\.\d+)+)`)},
 	"mkfs.xfs":   {[]string{"-V"}, regexp.MustCompile(`mkfs\.xfs version (\d+(?:\.\d+)*)`)},
 	"mkfs.btrfs": {[]string{"--version"}, regexp.MustCompile(`btrfs-progs v(\d+(?:\.\d+)*)`)},
+	// mkfs.fat has no version flag; its banner is the first line of the
+	// no-argument usage error.
+	"mkfs.fat": {nil, regexp.MustCompile(`mkfs\.fat (\d+(?:\.\d+)*)`)},
 }
 
 // ParseVersionBanner extracts the version from a backend's version banner.

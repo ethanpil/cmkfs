@@ -211,6 +211,7 @@ func TestParseVersionBanner(t *testing.T) {
 		{"mkfs.xfs", "mkfs.xfs version 6.1.1", "6.1.1"},
 		{"mkfs.btrfs", "mkfs.btrfs, part of btrfs-progs v6.3", "6.3"},
 		{"mkfs.btrfs", "mkfs.btrfs, part of btrfs-progs v6.6.3", "6.6.3"},
+		{"mkfs.fat", "mkfs.fat 4.2 (2021-01-31)\nNo device specified.\nUsage: mkfs.fat [OPTIONS] TARGET [BLOCKS]", "4.2"},
 		{"mkfs.ext4", "some garbage banner", ""},
 		{"mkfs.xfs", "", ""},
 		{"mkfs.unknown", "whatever 1.0", ""},

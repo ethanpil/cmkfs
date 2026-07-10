@@ -5,7 +5,7 @@ package schema
 // conditionals, no arithmetic (i64 is the one permitted helper, defined in
 // schema.go).
 
-var Schemas = []Schema{ext4, xfs, btrfs}
+var Schemas = []Schema{ext4, xfs, btrfs, vfat}
 
 var ext4 = Schema{
 	ID:          "ext4",
@@ -128,6 +128,100 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 			Type:        KindBool,
 			Default:     true,
 			FlagFalse:   "-O ^has_journal",
+		},
+	},
+}
+
+var vfat = Schema{
+	ID:            "vfat",
+	Name:          "FAT32 (vfat)",
+	Description:   "FAT filesystem (FAT12/16/32). Readable everywhere — firmware, cameras, EFI system partitions, small USB media. No permissions; 4 GiB max file size.",
+	Binary:        "mkfs.fat",
+	ForceFlag:     "",   // mkfs.fat overwrites signatures unconditionally; see spec §9
+	WholeDiskFlag: "-I", // mkfs.fat refuses entire-disk targets without it
+	MinVersion:    "4.1",
+	Options: []Option{
+		{
+			ID:          "label",
+			Name:        "Volume label",
+			Description: "Human-readable name for the filesystem. FAT labels are max 11 bytes: uppercase letters, digits, underscore, dash, and space.",
+			Type:        KindString,
+			Default:     "",
+			Flag:        "-n {value}",
+			MaxBytes:    11,
+			Pattern:     `^[A-Z0-9_\- ]*$`,
+		},
+		{
+			ID:          "fat_size",
+			Name:        "FAT size",
+			Description: "Width of FAT table entries: 12, 16, or 32 bits. Auto lets mkfs.fat pick by device size. FAT32 is required beyond ~2 GiB; some firmware expects a specific size.",
+			LongHelp: `The FAT size sets how many clusters the filesystem can address, and with it
+the practical volume size range:
+
+  FAT12  up to a few MiB — floppies and tiny flash media.
+  FAT16  roughly 16 MiB to 2 GiB (larger with big clusters).
+  FAT32  512 MiB up to 2 TiB; the only choice for most modern media.
+
+Auto picks by device size and is right for normal use. Set it explicitly
+when a consumer demands a specific FAT width — EFI system partitions are
+commonly formatted FAT32 regardless of size, while some embedded devices
+and older firmware only read FAT16. mkfs.fat fails if the requested size
+cannot address the device with the available cluster sizes.`,
+			Type:    KindEnum,
+			Default: "auto",
+			Omit:    "auto",
+			Flag:    "-F {value}",
+			Values: []EnumValue{
+				{Value: "auto", Label: "Auto (backend default)", Help: "mkfs.fat picks 12/16/32 by device size."},
+				{Value: "12", Label: "FAT12", Help: "Tiny media only (up to a few MiB)."},
+				{Value: "16", Label: "FAT16", Help: "Small media up to ~2 GiB; expected by some embedded firmware."},
+				{Value: "32", Label: "FAT32", Help: "Standard for modern media and EFI system partitions."},
+			},
+		},
+		{
+			ID:          "sectors_per_cluster",
+			Name:        "Sectors per cluster",
+			Description: "Cluster size in logical sectors (power of two). Larger clusters waste space on small files but keep the FAT small on big volumes. Leave on auto unless a consumer requires a value.",
+			Type:        KindEnum,
+			Default:     "auto",
+			Omit:        "auto",
+			Flag:        "-s {value}",
+			Values: []EnumValue{
+				{Value: "auto", Label: "Auto (backend default)"},
+				{Value: "1", Label: "1 sector"},
+				{Value: "2", Label: "2 sectors"},
+				{Value: "4", Label: "4 sectors"},
+				{Value: "8", Label: "8 sectors", Help: "4 KiB clusters with 512-byte sectors."},
+				{Value: "16", Label: "16 sectors"},
+				{Value: "32", Label: "32 sectors"},
+				{Value: "64", Label: "64 sectors", Help: "32 KiB clusters with 512-byte sectors."},
+				{Value: "128", Label: "128 sectors"},
+			},
+		},
+		{
+			ID:          "sector_size",
+			Name:        "Logical sector size",
+			Description: "Bytes per logical sector. Auto uses the device's sector size, which is almost always correct. Sizes other than 512 are poorly supported by other operating systems.",
+			Type:        KindEnum,
+			Default:     "auto",
+			Omit:        "auto",
+			Flag:        "-S {value}",
+			Values: []EnumValue{
+				{Value: "auto", Label: "Auto (device sector size)"},
+				{Value: "512", Label: "512 bytes", Help: "Universal default."},
+				{Value: "1024", Label: "1024 bytes"},
+				{Value: "2048", Label: "2048 bytes"},
+				{Value: "4096", Label: "4096 bytes"},
+			},
+		},
+		{
+			ID:          "volume_id",
+			Name:        "Volume ID",
+			Description: "FAT volume serial number as 8 hex digits, displayed as XXXX-XXXX. Random when unset. FAT has no UUID; this is what mount-by-UUID matches against.",
+			Type:        KindString,
+			Default:     "",
+			Flag:        "-i {value}",
+			Pattern:     `^[0-9a-fA-F]{8}$`,
 		},
 	},
 }

@@ -48,7 +48,7 @@ jobs:
       - name: Install filesystem tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends xfsprogs btrfs-progs e2fsprogs dmsetup util-linux
+          sudo apt-get install -y --no-install-recommends xfsprogs btrfs-progs e2fsprogs dosfstools dmsetup util-linux
       - name: Run loop-device integration tests as root
         run: |
           sudo --preserve-env=HOME env \

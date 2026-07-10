@@ -84,8 +84,8 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 - Root (`sudo cmkfs`).
 - `lsblk` from util-linux ≥ 2.33 (present on effectively every system).
 - Whichever backends you want to use: `mkfs.ext4` (e2fsprogs),
-  `mkfs.xfs` (xfsprogs), `mkfs.btrfs` (btrfs-progs). Missing backends are
-  simply greyed out in the picker.
+  `mkfs.xfs` (xfsprogs), `mkfs.btrfs` (btrfs-progs), `mkfs.fat`
+  (dosfstools). Missing backends are simply greyed out in the picker.
 - A terminal of at least 80x24.
 
 ## Keys
@@ -120,7 +120,8 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 - Detects devices held by LVM, dm-crypt, md, or multipath (transitively).
 - Detects existing filesystem signatures and partition tables; overwriting
   them requires typing the device name, and only then is the backend's
-  force flag injected.
+  force flag injected. (FAT tools overwrite signatures unconditionally and
+  have no force flag — there the typed confirmation is the guard.)
 - Always shows the exact command before execution.
 - Re-checks everything immediately before spawning `mkfs`: if the device was
   mounted, changed, or claimed between your confirmation and execution, the

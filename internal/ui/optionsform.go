@@ -410,7 +410,15 @@ func (a *App) viewOptionsForm() string {
 			}
 		default:
 			ti := f.inputs[o.ID]
+			// Values can be long (a 512-byte f2fs label, a 36-char UUID); cap
+			// the field to the space after the name column so a long value
+			// scrolls inside the field instead of overrunning the window.
+			valWidth := a.width - 30
+			if valWidth < 20 {
+				valWidth = 20
+			}
 			if focused && disabled == "" {
+				ti.Width = valWidth
 				ti.Focus()
 				val = ti.View()
 			} else {
@@ -421,7 +429,9 @@ func (a *App) viewOptionsForm() string {
 					if hint == "" {
 						hint = "(backend default)"
 					}
-					raw = styleDim.Render(hint)
+					raw = styleDim.Render(trunc(hint, valWidth))
+				} else {
+					raw = trunc(raw, valWidth)
 				}
 				val = raw
 			}
@@ -462,10 +472,14 @@ func (a *App) viewOptionsForm() string {
 		}
 		b.WriteString(prompt + "\n")
 		if f.extraErr != "" {
-			b.WriteString("  " + styleDanger.Render(f.extraErr) + "\n")
+			b.WriteString(styleDanger.Render(indentWrap(f.extraErr, "  ", a.width)) + "\n")
 		}
 		for i, tok := range a.extra {
-			row := fmt.Sprintf("    %d. %s", i+1, tok)
+			// A token is one argv element and may be long; wrap it under the
+			// "    N. " gutter so it never runs past the window.
+			gutter := fmt.Sprintf("    %d. ", i+1)
+			gw := lipgloss.Width(gutter)
+			row := gutter + wrapIndent(tok, a.width-gw, strings.Repeat(" ", gw))
 			if cur.kind == ftExtraToken && cur.tok == i {
 				row = styleSelected.Render(row)
 			} else {
@@ -475,8 +489,7 @@ func (a *App) viewOptionsForm() string {
 		}
 		extraHelp := "Each entry is exactly one argv token: -E nodiscard is TWO tokens, -E then nodiscard.\n" +
 			"Enter add · d remove · Shift+↑/↓ reorder. Routinely need a flag? Please file an issue so it can be added properly."
-		b.WriteString(styleHelp.Render("  "+strings.ReplaceAll(
-			wordWrap(extraHelp, a.width-4), "\n", "\n  ")) + "\n")
+		b.WriteString(styleHelp.Render("  "+wrapIndent(extraHelp, a.width-4, "  ")) + "\n")
 	}
 
 	// Continue action.
@@ -530,8 +543,7 @@ func (a *App) viewLongHelpOverlay(id string) string {
 		}
 		col := labelW + 3 // "  " + label column + " "
 		for _, v := range o.Values {
-			help := strings.ReplaceAll(wordWrap(v.Help, a.width-col-1),
-				"\n", "\n"+strings.Repeat(" ", col))
+			help := wrapIndent(v.Help, a.width-col-1, strings.Repeat(" ", col))
 			pad := strings.Repeat(" ", labelW-lipgloss.Width(v.Label))
 			b.WriteString("  " + v.Label + pad + " " + help + "\n")
 		}
@@ -564,32 +576,76 @@ func (a *App) viewLongHelpOverlay(id string) string {
 	return b.String()
 }
 
+// wrapIndent word-wraps s to width, then prefixes every continuation line
+// with indent so wrapped text hangs under a leading column.
+func wrapIndent(s string, width int, indent string) string {
+	return strings.ReplaceAll(wordWrap(s, width), "\n", "\n"+indent)
+}
+
+// indentWrap word-wraps s so that, once every line carries prefix, the whole
+// block fits in width columns, then prefixes every line (first included).
+func indentWrap(s, prefix string, width int) string {
+	body := wordWrap(s, width-lipgloss.Width(prefix))
+	return prefix + strings.ReplaceAll(body, "\n", "\n"+prefix)
+}
+
 func wordWrap(s string, width int) string {
 	if width < 20 {
 		width = 20
 	}
 	var out []string
 	for _, para := range strings.Split(s, "\n") {
-		words := strings.Fields(para)
-		if len(words) == 0 {
-			out = append(out, "")
-			continue
-		}
 		// Preserve pre-indented lines (LongHelp tables) as-is.
 		if strings.HasPrefix(para, " ") {
 			out = append(out, para)
 			continue
 		}
-		line := words[0]
-		for _, w := range words[1:] {
-			if len(line)+1+len(w) > width {
+		words := strings.Fields(para)
+		if len(words) == 0 {
+			out = append(out, "")
+			continue
+		}
+		line := ""
+		for _, w := range words {
+			// Hard-break a word too long to ever fit on one line (a long
+			// label, path, UUID, or extra-argument token), so no output line
+			// can exceed width even when there is nothing to break on.
+			for lipgloss.Width(w) > width {
+				if line != "" {
+					out = append(out, line)
+					line = ""
+				}
+				var head string
+				head, w = splitWidth(w, width)
+				out = append(out, head)
+			}
+			switch {
+			case line == "":
+				line = w
+			case lipgloss.Width(line)+1+lipgloss.Width(w) > width:
 				out = append(out, line)
 				line = w
-			} else {
+			default:
 				line += " " + w
 			}
 		}
-		out = append(out, line)
+		if line != "" {
+			out = append(out, line)
+		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// splitWidth returns the longest prefix of s whose display width is <= width
+// and the remainder, splitting only on rune boundaries.
+func splitWidth(s string, width int) (string, string) {
+	w := 0
+	for i, r := range s {
+		rw := lipgloss.Width(string(r))
+		if w+rw > width && i > 0 {
+			return s[:i], s[i:]
+		}
+		w += rw
+	}
+	return s, ""
 }

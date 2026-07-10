@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/schema"
@@ -79,20 +80,25 @@ func (a *App) viewFSPicker() string {
 		fmt.Fprintf(&b, "Target: %s (%s)\n\n", styleHeader.Render(a.dev.Path), device.HumanSizeCompact(a.dev.SizeBytes))
 	}
 	// The renderer truncates at the window width, so descriptions and
-	// reasons are wrapped with a hanging indent under the name column.
-	const nameCol = 15 // "  " + %-12s + " "
+	// reasons are wrapped with a hanging indent under the name column. The
+	// name column is sized to the widest schema Name so it never overflows
+	// when a longer filesystem is added.
+	nameW := 0
+	for _, s := range a.cfg.Schemas {
+		if w := lipgloss.Width(s.Name); w > nameW {
+			nameW = w
+		}
+	}
+	nameCol := nameW + 3 // "  " + name column + " "
 	indent := strings.Repeat(" ", nameCol)
 	for i, s := range a.cfg.Schemas {
 		reason := a.pickerDisabledReason(s)
-		desc := strings.Split(wordWrap(s.Description, a.width-nameCol-1), "\n")
-		line := fmt.Sprintf("  %-12s %s", s.Name, desc[0])
-		for _, l := range desc[1:] {
-			line += "\n" + indent + l
-		}
+		pad := strings.Repeat(" ", nameW-lipgloss.Width(s.Name))
+		desc := wrapIndent(s.Description, a.width-nameCol-1, indent)
+		line := "  " + s.Name + pad + " " + desc
 		var reasonLine string
 		if reason != "" {
-			reasonLine = indent + strings.ReplaceAll(
-				wordWrap(reason, a.width-nameCol-1), "\n", "\n"+indent)
+			reasonLine = indent + wrapIndent(reason, a.width-nameCol-1, indent)
 		}
 		switch {
 		case i == a.picker.cursor && reason == "":

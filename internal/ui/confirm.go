@@ -206,16 +206,16 @@ func (a *App) viewConfirm() string {
 	if d.Transport != "" {
 		summary += "  (" + d.Transport + ")"
 	}
-	b.WriteString(styleHeader.Render(summary) + "\n")
+	b.WriteString(styleHeader.Render(wordWrap(summary, a.width)) + "\n")
 	for _, f := range a.report.Findings {
-		b.WriteString("  " + severityStyle(f.Severity).Render(f.Message) + "\n")
+		b.WriteString(severityStyle(f.Severity).Render(indentWrap(f.Message, "  ", a.width)) + "\n")
 	}
 	if len(a.report.Findings) == 0 {
 		b.WriteString("  " + styleSuccess.Render("No safety findings.") + "\n")
 	}
 	if a.fs != nil {
 		if w := versionWarning(*a.fs, a.cfg.Backends); w != "" {
-			b.WriteString("  " + styleWarn.Render(w) + "\n")
+			b.WriteString(styleWarn.Render(indentWrap(w, "  ", a.width)) + "\n")
 		}
 	}
 	b.WriteString("\n")

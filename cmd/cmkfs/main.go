@@ -50,11 +50,15 @@ func run() (code int) {
 	// QEMU/UTM and other serial consoles advertise TERMs whose terminfo has
 	// no color capability (vt100/vt220/...), so the styles silently degrade
 	// to monochrome even though the emulator renders color fine. Force basic
-	// ANSI there; an explicit NO_COLOR or CLICOLOR_FORCE from the user always
-	// wins (both are honored by the style engine).
+	// ANSI there via CLICOLOR_FORCE, which termenv reads live when lipgloss
+	// resolves the profile at first render. An explicit NO_COLOR or
+	// CLICOLOR_FORCE from the user always wins. (Setting the env, rather than
+	// calling into termenv, keeps the direct dependency graph Charm-only per
+	// CONTRIBUTING.) os.Setenv only fails on a malformed name, which this is
+	// not, so the error is not actionable.
 	if strings.HasPrefix(os.Getenv("TERM"), "vt") &&
 		os.Getenv("NO_COLOR") == "" && os.Getenv("CLICOLOR_FORCE") == "" {
-		os.Setenv("CLICOLOR_FORCE", "1")
+		_ = os.Setenv("CLICOLOR_FORCE", "1")
 	}
 
 	fs := flag.NewFlagSet("cmkfs", flag.ExitOnError) // flag exits 2 on bad flags

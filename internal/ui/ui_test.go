@@ -599,8 +599,10 @@ func TestResultNewRunResetsSelections(t *testing.T) {
 }
 
 // TestViewsFitWidth: the renderer truncates lines wider than the terminal,
-// so every screen must wrap its content to the window width — the picker
-// descriptions and soft version warnings once overflowed 80-column consoles.
+// so the text-heavy interactive screens (picker, options form and its
+// overlays, confirm) must wrap their content to the window width — the
+// picker descriptions and soft version warnings once overflowed 80-column
+// consoles. The columnar device list is a separate, table-layout concern.
 func TestViewsFitWidth(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	a.width, a.height = 80, 24
@@ -623,6 +625,8 @@ func TestViewsFitWidth(t *testing.T) {
 		checkFit("picker on " + s.ID)
 	}
 
+	longLabel := strings.Repeat("x", 120) // a valid-but-long typed value
+
 	for _, s := range a.cfg.Schemas {
 		fs := s
 		a.fs = &fs
@@ -632,8 +636,21 @@ func TestViewsFitWidth(t *testing.T) {
 			a.form.focus = i
 			checkFit(s.ID + " form")
 		}
+		// A long typed value must scroll inside its field, not overrun.
+		if ti, ok := a.form.inputs["label"]; ok {
+			ti.SetValue(longLabel)
+			a.form.inputs["label"] = ti
+			checkFit(s.ID + " form long label (blurred)")
+			focusOption(t, a, "label")
+			checkFit(s.ID + " form long label (focused)")
+		}
+		// A long extra-argument token must wrap under its gutter.
 		a.form.advancedOpen = true
+		a.extra = []string{longLabel}
+		a.form.extraErr = strings.Repeat("e", 120)
 		checkFit(s.ID + " form advanced")
+		a.extra = nil
+		a.form.extraErr = ""
 		a.form.advancedOpen = false
 		for _, o := range fs.Options {
 			a.form.overlayOpt = o.ID
@@ -641,6 +658,21 @@ func TestViewsFitWidth(t *testing.T) {
 		}
 		a.form.overlayOpt = ""
 	}
+
+	// Confirm screen: a long finding message and a long device model.
+	longDev := cleanDisk()
+	longDev.Model = strings.Repeat("M", 90)
+	a.dev = &longDev
+	a.report = safety.Report{Findings: []safety.Finding{
+		{Severity: safety.Warning, Code: "SIGNATURE_FS", Message: "Existing xfs filesystem " + strings.Repeat("z", 90) + " will be destroyed."},
+	}}
+	fs := a.cfg.Schemas[0]
+	a.fs = &fs
+	a.argv = []string{"mkfs.ext4", longDev.Path}
+	a.display = "mkfs.ext4 " + longDev.Path
+	a.confirm = confirmState{typedMode: true}
+	a.screen = ScreenConfirm
+	checkFit("confirm long finding + model")
 }
 
 func TestBoolToggleEmission(t *testing.T) {

@@ -139,7 +139,7 @@ instead, use Bytes per inode (the two are mutually exclusive).`,
 var vfat = Schema{
 	ID:            "vfat",
 	Name:          "FAT32 (vfat)",
-	Description:   "The universally readable FAT filesystem — firmware, cameras, EFI partitions, USB media. 4 GiB max file size.",
+	Description:   "The universally readable FAT filesystem — firmware, cameras, EFI partitions, USB media. No permissions; 4 GiB max file size.",
 	Binary:        "mkfs.fat",
 	ForceFlag:     "",   // mkfs.fat overwrites signatures unconditionally; see spec §9
 	WholeDiskFlag: "-I", // mkfs.fat refuses entire-disk targets without it
@@ -235,7 +235,7 @@ cannot address the device with the available cluster sizes.`,
 var exfat = Schema{
 	ID:          "exfat",
 	Name:        "exFAT",
-	Description: "Extended FAT for large cross-platform media: big SD cards and external drives, files over 4 GiB.",
+	Description: "Extended FAT for large cross-platform media: big SD cards and drives, files over 4 GiB. No permissions or journaling.",
 	Binary:      "mkfs.exfat",
 	ForceFlag:   "", // mkfs.exfat overwrites signatures unconditionally; see spec §9
 	MinVersion:  "1.1",

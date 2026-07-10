@@ -183,6 +183,32 @@ func TestBuildGolden(t *testing.T) {
 			wantDisplay: "mkfs.fat /dev/sdb1",
 		},
 		{
+			name:        "exfat all defaults",
+			schemaID:    "exfat",
+			device:      "/dev/loop9",
+			wantArgv:    []string{"mkfs.exfat", "/dev/loop9"},
+			wantDisplay: "mkfs.exfat /dev/loop9",
+		},
+		{
+			name:     "exfat label and cluster size",
+			schemaID: "exfat",
+			values: map[string]any{
+				"label":        "SDCARD",
+				"cluster_size": "128K",
+			},
+			device:      "/dev/mmcblk0p1",
+			wantArgv:    []string{"mkfs.exfat", "-L", "SDCARD", "-c", "128K", "/dev/mmcblk0p1"},
+			wantDisplay: "mkfs.exfat -L SDCARD -c 128K /dev/mmcblk0p1",
+		},
+		{
+			name:        "exfat force is a no-op (no signature gate)",
+			schemaID:    "exfat",
+			device:      "/dev/sdb1",
+			force:       true,
+			wantArgv:    []string{"mkfs.exfat", "/dev/sdb1"},
+			wantDisplay: "mkfs.exfat /dev/sdb1",
+		},
+		{
 			name:        "extra args appended after schema flags before device",
 			schemaID:    "ext4",
 			values:      map[string]any{"label": "x"},

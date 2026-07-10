@@ -23,6 +23,7 @@ var installHint = map[string]string{
 	"mkfs.xfs":   "xfsprogs",
 	"mkfs.btrfs": "btrfs-progs",
 	"mkfs.fat":   "dosfstools",
+	"mkfs.exfat": "exfatprogs",
 }
 
 // pickerDisabledReason returns "" when the schema is selectable for the

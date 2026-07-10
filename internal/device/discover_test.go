@@ -212,6 +212,8 @@ func TestParseVersionBanner(t *testing.T) {
 		{"mkfs.btrfs", "mkfs.btrfs, part of btrfs-progs v6.3", "6.3"},
 		{"mkfs.btrfs", "mkfs.btrfs, part of btrfs-progs v6.6.3", "6.6.3"},
 		{"mkfs.fat", "mkfs.fat 4.2 (2021-01-31)\nNo device specified.\nUsage: mkfs.fat [OPTIONS] TARGET [BLOCKS]", "4.2"},
+		{"mkfs.exfat", "exfatprogs version : 1.2.2", "1.2.2"},
+		{"mkfs.exfat", "mkexfatfs 1.3.0", ""}, // legacy fuse exfat-utils: unparseable by design
 		{"mkfs.ext4", "some garbage banner", ""},
 		{"mkfs.xfs", "", ""},
 		{"mkfs.unknown", "whatever 1.0", ""},

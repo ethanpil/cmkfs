@@ -5,7 +5,7 @@ package schema
 // conditionals, no arithmetic (i64 is the one permitted helper, defined in
 // schema.go).
 
-var Schemas = []Schema{ext4, xfs, btrfs, vfat}
+var Schemas = []Schema{ext4, xfs, btrfs, vfat, exfat}
 
 var ext4 = Schema{
 	ID:          "ext4",
@@ -222,6 +222,72 @@ cannot address the device with the available cluster sizes.`,
 			Default:     "",
 			Flag:        "-i {value}",
 			Pattern:     `^[0-9a-fA-F]{8}$`,
+		},
+	},
+}
+
+var exfat = Schema{
+	ID:          "exfat",
+	Name:        "exFAT",
+	Description: "Extended FAT for large cross-platform media: SDXC cards and external drives with files over FAT32's 4 GiB limit. No permissions or journaling.",
+	Binary:      "mkfs.exfat",
+	ForceFlag:   "", // mkfs.exfat overwrites signatures unconditionally; see spec §9
+	MinVersion:  "1.1",
+	Options: []Option{
+		{
+			ID:          "label",
+			Name:        "Volume label",
+			Description: "Human-readable name for the filesystem. exFAT labels hold up to 11 characters.",
+			Type:        KindString,
+			Default:     "",
+			Flag:        "-L {value}",
+			MaxBytes:    11,
+			Pattern:     `^[^\x00-\x1f]*$`,
+		},
+		{
+			ID:          "cluster_size",
+			Name:        "Cluster size",
+			Description: "Allocation unit size. Auto picks by device size (128 KiB on most SDXC-class media). Larger clusters speed up large-file workloads; smaller ones waste less space on small files.",
+			LongHelp: `exFAT allocates space in clusters; every file occupies at least one. The
+backend default scales with device size and follows the SD Association's
+recommendation for card sizes (commonly 32 KiB up to 32 GiB and 128 KiB
+above), which is what cameras and other appliances expect.
+
+Pick a large cluster (512 KiB, 1 MiB) only for volumes holding exclusively
+big files — video archives, disk images — where it reduces metadata
+overhead. Pick a small one (4-32 KiB) for mixed content on large drives
+where per-file waste matters. When unsure, leave on Auto.`,
+			Type:    KindEnum,
+			Default: "auto",
+			Omit:    "auto",
+			Flag:    "-c {value}",
+			Values: []EnumValue{
+				{Value: "auto", Label: "Auto (backend default)", Help: "Scales with device size; matches SD Association recommendations."},
+				{Value: "4K", Label: "4 KiB", Help: "Least waste for many small files."},
+				{Value: "8K", Label: "8 KiB"},
+				{Value: "16K", Label: "16 KiB"},
+				{Value: "32K", Label: "32 KiB", Help: "Common on cards up to 32 GiB."},
+				{Value: "64K", Label: "64 KiB"},
+				{Value: "128K", Label: "128 KiB", Help: "Common on SDXC cards above 32 GiB."},
+				{Value: "256K", Label: "256 KiB"},
+				{Value: "512K", Label: "512 KiB"},
+				{Value: "1M", Label: "1 MiB", Help: "Large-file-only volumes (video, images)."},
+			},
+		},
+		{
+			ID:          "boundary_align",
+			Name:        "Boundary alignment",
+			Description: "Aligns filesystem structures to this boundary, matching the flash erase block for less write amplification. Backend default is 1 MiB; 4-16 MiB suits many SD cards.",
+			Type:        KindEnum,
+			Default:     "auto",
+			Omit:        "auto",
+			Flag:        "-b {value}",
+			Values: []EnumValue{
+				{Value: "auto", Label: "Auto (backend default: 1 MiB)"},
+				{Value: "1M", Label: "1 MiB"},
+				{Value: "4M", Label: "4 MiB"},
+				{Value: "16M", Label: "16 MiB", Help: "Typical erase-block boundary on larger SD cards."},
+			},
 		},
 	},
 }

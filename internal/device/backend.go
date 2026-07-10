@@ -29,6 +29,9 @@ var versionProbes = map[string]struct {
 	// mkfs.fat has no version flag; its banner is the first line of the
 	// no-argument usage error.
 	"mkfs.fat": {nil, regexp.MustCompile(`mkfs\.fat (\d+(?:\.\d+)*)`)},
+	// The regex matches exfatprogs only; the legacy fuse exfat-utils
+	// mkfs.exfat (incompatible flags) yields "" and the soft version warning.
+	"mkfs.exfat": {[]string{"-V"}, regexp.MustCompile(`exfatprogs version : (\d+(?:\.\d+)*)`)},
 }
 
 // ParseVersionBanner extracts the version from a backend's version banner.

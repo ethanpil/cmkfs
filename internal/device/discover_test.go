@@ -155,6 +155,48 @@ func TestParseLegacyStringFields(t *testing.T) {
 	}
 }
 
+// TestParseExcludedIntermediateKeepsLinkage: a partition below an excluded
+// mpath map must remain a child of the nearest included ancestor (the disk),
+// or whole-disk safety checks would skip it.
+func TestParseExcludedIntermediateKeepsLinkage(t *testing.T) {
+	devs, err := Parse(fixture(t, "lsblk_mpath_intermediate.json"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(devs) != 2 {
+		t.Fatalf("want disk + partition (mpath excluded), got %v", paths(devs))
+	}
+	disk := find(t, devs, "/dev/sdx")
+	if len(disk.Children) != 1 || disk.Children[0] != "/dev/mapper/mpatha-part1" {
+		t.Fatalf("partition below excluded mpath must be promoted to the disk's children, got %v", disk.Children)
+	}
+	part := find(t, devs, "/dev/mapper/mpatha-part1")
+	if part.Parent != "/dev/sdx" {
+		t.Fatalf("promoted partition parent = %q, want /dev/sdx", part.Parent)
+	}
+}
+
+func TestHumanSizeClamp(t *testing.T) {
+	cases := []struct {
+		in           int64
+		long, short_ string
+	}{
+		{512, "512 B", "512B"},
+		{314572800, "300 MiB", "300M"},
+		{1610612736, "1.5 GiB", "1.5G"},
+		{1 << 60, "1 EiB", "1.0E"},             // must not panic (suffix clamp)
+		{9223372036854775807, "8 EiB", "8.0E"}, // int64 max
+	}
+	for _, tc := range cases {
+		if got := HumanSize(tc.in); got != tc.long {
+			t.Errorf("HumanSize(%d) = %q, want %q", tc.in, got, tc.long)
+		}
+		if got := HumanSizeCompact(tc.in); got != tc.short_ {
+			t.Errorf("HumanSizeCompact(%d) = %q, want %q", tc.in, got, tc.short_)
+		}
+	}
+}
+
 func TestParseGarbage(t *testing.T) {
 	if _, err := Parse([]byte("not json"), false); err == nil {
 		t.Fatal("expected error for garbage input")

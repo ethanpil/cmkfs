@@ -45,7 +45,10 @@ type Config struct {
 	PrintMode bool
 	// InitialDevicePath skips Screen 1 (positional device argument).
 	InitialDevicePath string
-	Version           string
+	// InitialDevices, when non-nil, seeds the device list so main's startup
+	// enumeration isn't repeated (lsblk forks once per launch, not twice).
+	InitialDevices []device.Device
+	Version        string
 }
 
 // App is the top-level model.
@@ -91,7 +94,12 @@ func NewApp(cfg Config) *App {
 	}
 	a := &App{cfg: cfg, width: minWidth, height: minHeight}
 	a.list.cursor = -1 // nothing pre-selected: cursor starts on the header row
-	a.refreshDevices()
+	if cfg.InitialDevices != nil {
+		a.devices = cfg.InitialDevices
+		a.list.refresh(a)
+	} else {
+		a.refreshDevices()
+	}
 	if cfg.InitialDevicePath != "" {
 		for i := range a.devices {
 			if a.devices[i].Path == cfg.InitialDevicePath {
@@ -345,23 +353,4 @@ func (a *App) viewHelpOverlay() string {
 		out += fmt.Sprintf("  %-14s %s\n", styleHeader.Render(r[0]), r[1])
 	}
 	return out + "\n" + styleHelp.Render("Press ? or Esc to close.")
-}
-
-// humanSize renders a byte count in binary units for tables.
-func humanSize(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%dB", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(b) / float64(div)
-	suffix := []string{"K", "M", "G", "T", "P"}[exp]
-	if v >= 100 {
-		return fmt.Sprintf("%.0f%s", v, suffix)
-	}
-	return fmt.Sprintf("%.1f%s", v, suffix)
 }

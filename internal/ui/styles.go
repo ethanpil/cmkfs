@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/ethanpil/cmkfs/internal/safety"
+)
 
 var (
 	styleTitle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).
@@ -28,11 +32,11 @@ var (
 	styleBox = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
 )
 
-func severityStyle(sev int) lipgloss.Style {
+func severityStyle(sev safety.Severity) lipgloss.Style {
 	switch sev {
-	case 2:
+	case safety.Blocker:
 		return styleDanger
-	case 1:
+	case safety.Warning:
 		return styleWarn
 	}
 	return styleInfo

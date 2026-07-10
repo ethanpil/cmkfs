@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/schema"
 )
 
@@ -35,7 +36,7 @@ func (a *App) pickerDisabledReason(s schema.Schema) string {
 		return fmt.Sprintf("%s not found — install %s", s.Binary, hint)
 	}
 	if a.dev != nil && s.MinSizeBytes > 0 && a.dev.SizeBytes < s.MinSizeBytes {
-		return fmt.Sprintf("%s requires at least %s; %s is %s.", s.Name, humanSizeLong(s.MinSizeBytes), a.dev.Path, humanSizeLong(a.dev.SizeBytes))
+		return fmt.Sprintf("%s requires at least %s; %s is %s.", s.Name, device.HumanSize(s.MinSizeBytes), a.dev.Path, device.HumanSize(a.dev.SizeBytes))
 	}
 	return ""
 }
@@ -72,7 +73,7 @@ func (a *App) viewFSPicker() string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("cmkfs — choose a filesystem") + "\n\n")
 	if a.dev != nil {
-		fmt.Fprintf(&b, "Target: %s (%s)\n\n", styleHeader.Render(a.dev.Path), humanSize(a.dev.SizeBytes))
+		fmt.Fprintf(&b, "Target: %s (%s)\n\n", styleHeader.Render(a.dev.Path), device.HumanSizeCompact(a.dev.SizeBytes))
 	}
 	for i, s := range a.cfg.Schemas {
 		reason := a.pickerDisabledReason(s)
@@ -99,22 +100,4 @@ func (a *App) viewFSPicker() string {
 	}
 	b.WriteString(styleHelp.Render("↑/↓ move · Enter select · Esc back · ? keys · q quit"))
 	return b.String()
-}
-
-func humanSizeLong(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(b) / float64(div)
-	suffix := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}[exp]
-	if v == float64(int64(v)) {
-		return fmt.Sprintf("%d %s", int64(v), suffix)
-	}
-	return fmt.Sprintf("%.1f %s", v, suffix)
 }

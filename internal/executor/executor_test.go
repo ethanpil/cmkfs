@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,49 @@ done:
 	}
 	if !ev.Gate.Has("MOUNTED") {
 		t.Fatalf("gate report lost: %+v", ev.Gate)
+	}
+}
+
+// TestScanOutputLines: the splitter handles \n, \r (in-place progress), \r\n,
+// and force-flushes terminator-less runs so the scanner can never overflow
+// (an overflow would close the pipe and SIGPIPE-kill the running mkfs).
+func TestScanOutputLines(t *testing.T) {
+	scan := func(in string, atEOF bool) (int, string) {
+		adv, tok, err := scanOutputLines([]byte(in), atEOF)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		return adv, string(tok)
+	}
+
+	if adv, tok := scan("hello\nworld", false); adv != 6 || tok != "hello" {
+		t.Errorf("newline split: adv=%d tok=%q", adv, tok)
+	}
+	if adv, tok := scan("42/100\rmore", false); adv != 7 || tok != "42/100" {
+		t.Errorf("carriage-return split: adv=%d tok=%q", adv, tok)
+	}
+	if adv, tok := scan("line\r\nnext", false); adv != 6 || tok != "line" {
+		t.Errorf("crlf split: adv=%d tok=%q", adv, tok)
+	}
+	// Trailing \r with more data possibly coming: wait.
+	if adv, _ := scan("partial\r", false); adv != 0 {
+		t.Errorf("trailing CR must wait for more data, adv=%d", adv)
+	}
+	// Trailing \r at EOF: emit.
+	if adv, tok := scan("partial\r", true); adv != 8 || tok != "partial" {
+		t.Errorf("trailing CR at EOF: adv=%d tok=%q", adv, tok)
+	}
+	// Terminator-less run at the threshold force-flushes instead of growing.
+	big := strings.Repeat("x", lineFlushThreshold)
+	if adv, tok := scan(big, false); adv != len(big) || tok != big {
+		t.Errorf("threshold flush failed: adv=%d len(tok)=%d", adv, len(tok))
+	}
+	// Below threshold, no terminator, not EOF: request more data.
+	if adv, _ := scan("short", false); adv != 0 {
+		t.Errorf("short run must request more data, adv=%d", adv)
+	}
+	if adv, tok := scan("short", true); adv != 5 || tok != "short" {
+		t.Errorf("EOF flush: adv=%d tok=%q", adv, tok)
 	}
 }
 

@@ -143,6 +143,22 @@ func (s System) holders(kname string) []string {
 	return out
 }
 
+// swapMatchesDevice reports whether a /proc/swaps source refers to the
+// device, under any of its names: the lsblk path, the kernel name, or an
+// alias symlink resolving to either.
+func swapMatchesDevice(sw string, d device.Device) bool {
+	names := []string{sw}
+	if resolved, err := filepath.EvalSymlinks(sw); err == nil {
+		names = append(names, resolved)
+	}
+	for _, n := range names {
+		if n == d.Path || n == "/dev/"+d.KName || filepath.Base(n) == d.KName {
+			return true
+		}
+	}
+	return false
+}
+
 // sysfsRO re-reads /sys/class/block/<kname>/ro; -1 when unreadable.
 func (s System) sysfsRO(kname string) int {
 	data, err := os.ReadFile(filepath.Join(s.sysRoot(), "class", "block", kname, "ro"))
@@ -251,11 +267,14 @@ func (s System) Check(p Params) Report {
 		}
 	}
 
-	// ACTIVE_SWAP: device or any child appears in /proc/swaps.
+	// ACTIVE_SWAP: device or any child appears in /proc/swaps. Swap may have
+	// been enabled under an alias (/dev/disk/by-id/..., /dev/mapper/...), so
+	// besides the literal comparison, resolve symlinks and match the kernel
+	// name too.
 	swaps := s.swapSources()
 	for _, d := range selfAndBelow {
 		for _, sw := range swaps {
-			if sw == d.Path || sw == "/dev/"+d.KName {
+			if swapMatchesDevice(sw, d) {
 				add(Blocker, "ACTIVE_SWAP", fmt.Sprintf("%s is active swap. Run swapoff first.", d.Path))
 			}
 		}
@@ -351,14 +370,17 @@ func (s System) Check(p Params) Report {
 		add(Warning, "SIGNATURE_FS", fmt.Sprintf("Existing %s filesystem%s will be destroyed.", dev.FSType, detail))
 	}
 
-	// SIGNATURE_PTABLE: whole-disk target with a partition table.
-	if dev.Type == "disk" && dev.PTType != "" {
+	// SIGNATURE_PTABLE: whole-device target carrying a partition table.
+	// lsblk reports a partition's PTTYPE as the table it belongs to, so
+	// partitions are excluded; any other type (disk, loop, lvm, crypt...)
+	// with a PTTYPE has a table of its own that the format will destroy.
+	if dev.Type != "part" && dev.PTType != "" {
 		add(Warning, "SIGNATURE_PTABLE", fmt.Sprintf("Existing %s partition table will be destroyed.", dev.PTType))
 	}
 
 	// TOO_SMALL: checked at filesystem-pick time.
 	if p.MinSizeBytes > 0 && dev.SizeBytes < p.MinSizeBytes {
-		add(Blocker, "TOO_SMALL", fmt.Sprintf("%s requires at least %s; %s is %s.", p.FSName, humanSize(p.MinSizeBytes), dev.Path, humanSize(dev.SizeBytes)))
+		add(Blocker, "TOO_SMALL", fmt.Sprintf("%s requires at least %s; %s is %s.", p.FSName, device.HumanSize(p.MinSizeBytes), dev.Path, device.HumanSize(dev.SizeBytes)))
 	}
 
 	// REMOVABLE.
@@ -371,23 +393,4 @@ func (s System) Check(p Params) Report {
 	}
 
 	return r
-}
-
-// humanSize renders a byte count in binary units.
-func humanSize(b int64) string {
-	const unit = 1024
-	if b < unit {
-		return fmt.Sprintf("%d B", b)
-	}
-	div, exp := int64(unit), 0
-	for n := b / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	v := float64(b) / float64(div)
-	suffix := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}[exp]
-	if v == float64(int64(v)) {
-		return fmt.Sprintf("%d %s", int64(v), suffix)
-	}
-	return fmt.Sprintf("%.1f %s", v, suffix)
 }

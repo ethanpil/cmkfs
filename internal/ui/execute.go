@@ -45,7 +45,22 @@ func (e *execState) resize(width, height int) {
 	e.vp.Height = h
 }
 
+// sanitizeLine strips control characters (backspace progress, ANSI-breaking
+// bytes) so backend output can't corrupt the viewport rendering.
+func sanitizeLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 func (e *execState) appendLine(line string) {
+	line = sanitizeLine(line)
 	e.lines = append(e.lines, line)
 	atBottom := e.vp.AtBottom()
 	e.vp.SetContent(strings.Join(e.lines, "\n"))

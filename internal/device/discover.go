@@ -106,19 +106,23 @@ func Parse(data []byte, showLoop bool) ([]Device, error) {
 		return nil, fmt.Errorf("cannot parse lsblk JSON: %w", err)
 	}
 	var devices []Device
-	var walk func(n lsblkNode, parentPath, parentModel string) string
-	walk = func(n lsblkNode, parentPath, parentModel string) string {
+	// walk returns the paths the caller must record as its children: the
+	// node itself when included, or — when the node is excluded (e.g. an
+	// mpath map between a disk and its partitions) — the node's included
+	// descendants, so ancestor/descendant safety checks never lose linkage
+	// across an excluded intermediate.
+	var walk func(n lsblkNode, parentPath, parentModel string) []string
+	walk = func(n lsblkNode, parentPath, parentModel string) []string {
 		model := deref(n.Model)
 		if model == "" {
 			model = parentModel // partitions inherit the disk's model
 		}
 		if !includeType(n.Type, showLoop) || isPseudoDevice(n.KName) {
-			// Excluded from the list, but still descend: children of an
-			// excluded node keep their true parent relationship.
+			var promoted []string
 			for _, c := range n.Children {
-				walk(c, parentPath, model)
+				promoted = append(promoted, walk(c, parentPath, model)...)
 			}
-			return ""
+			return promoted
 		}
 		var mounts []string
 		for _, m := range n.Mountpoints {
@@ -148,11 +152,9 @@ func Parse(data []byte, showLoop bool) ([]Device, error) {
 		idx := len(devices) - 1
 		selfPath := n.Name
 		for _, c := range n.Children {
-			if childPath := walk(c, selfPath, model); childPath != "" {
-				devices[idx].Children = append(devices[idx].Children, childPath)
-			}
+			devices[idx].Children = append(devices[idx].Children, walk(c, selfPath, model)...)
 		}
-		return selfPath
+		return []string{selfPath}
 	}
 	for _, n := range out.BlockDevices {
 		walk(n, "", "")

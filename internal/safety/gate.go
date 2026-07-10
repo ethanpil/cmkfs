@@ -90,7 +90,7 @@ func fingerprintDiff(was, now Fingerprint) string {
 	case was.FSUUID != now.FSUUID:
 		return "filesystem UUID changed"
 	case was.SizeBytes != now.SizeBytes:
-		return fmt.Sprintf("size was %s, now %s", humanSize(was.SizeBytes), humanSize(now.SizeBytes))
+		return fmt.Sprintf("size was %s, now %s", device.HumanSize(was.SizeBytes), device.HumanSize(now.SizeBytes))
 	case was.PTType != now.PTType:
 		return fmt.Sprintf("partition table was %s, now %s", orNone(was.PTType), orNone(now.PTType))
 	}

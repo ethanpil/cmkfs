@@ -283,6 +283,22 @@ func TestBuildErrors(t *testing.T) {
 	}
 }
 
+// TestValidateSizeSingleBound: a KindSize option with only one bound must
+// produce an error, not a nil-pointer panic on the missing bound.
+func TestValidateSizeSingleBound(t *testing.T) {
+	min := int64(512)
+	s := schema.Schema{ID: "t", Binary: "mkfs.t"}
+	minOnly := schema.Option{ID: "sz", Name: "Size", Type: schema.KindSize, Default: "", Min: &min}
+	if err := ValidateValue(s, minOnly, "1"); err == nil || !strings.Contains(err.Error(), "512") {
+		t.Fatalf("want bound error, got %v", err)
+	}
+	max := int64(4096)
+	maxOnly := schema.Option{ID: "sz", Name: "Size", Type: schema.KindSize, Default: "", Max: &max}
+	if err := ValidateValue(s, maxOnly, "8k"); err == nil || !strings.Contains(err.Error(), "4096") {
+		t.Fatalf("want bound error, got %v", err)
+	}
+}
+
 func TestParseSize(t *testing.T) {
 	cases := []struct {
 		in      string

@@ -5,6 +5,7 @@ package executor
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -27,6 +28,39 @@ type Event struct {
 
 // killGrace is how long SIGTERM gets before SIGKILL on abort.
 var killGrace = 5 * time.Second
+
+// lineFlushThreshold caps how much terminator-less output accumulates before
+// it is emitted as a line anyway. mkfs backends write in-place progress
+// (backspaces, no newline) that can exceed any fixed line buffer on huge
+// devices; overflowing the scanner would close the pipe and SIGPIPE-kill the
+// backend mid-format, so a flush is mandatory, not cosmetic.
+const lineFlushThreshold = 32 * 1024
+
+// scanOutputLines splits on \n or \r (treating \r\n as one terminator, so
+// carriage-return progress updates surface as lines), and force-flushes any
+// terminator-less run that reaches lineFlushThreshold.
+func scanOutputLines(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	if i := bytes.IndexAny(data, "\r\n"); i >= 0 {
+		advance = i + 1
+		if data[i] == '\r' {
+			if !atEOF && i == len(data)-1 {
+				// Can't tell yet whether a \n follows; wait for more data.
+				return 0, nil, nil
+			}
+			if i+1 < len(data) && data[i+1] == '\n' {
+				advance = i + 2
+			}
+		}
+		return advance, data[:i], nil
+	}
+	if len(data) >= lineFlushThreshold || atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
 
 // Run executes argv with the given pre-exec gate. The gate is invoked as the
 // executor's first action; on !ok Run emits a single Event{Done: true,
@@ -72,6 +106,14 @@ func Run(ctx context.Context, argv []string, gate func() (safety.Report, bool)) 
 		go func() {
 			select {
 			case <-ctx.Done():
+				// The UI cancels the context on normal completion too; only
+				// treat this as an abort if the process hasn't been reaped —
+				// signaling a reaped (possibly reused) pgid must never happen.
+				select {
+				case <-waitDone:
+					return
+				default:
+				}
 				aborted.Store(true)
 				terminateGroup(cmd)
 				select {
@@ -84,7 +126,8 @@ func Run(ctx context.Context, argv []string, gate func() (safety.Report, bool)) 
 		}()
 
 		scanner := bufio.NewScanner(r)
-		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		scanner.Buffer(make([]byte, 64*1024), 128*1024)
+		scanner.Split(scanOutputLines)
 		for scanner.Scan() {
 			ch <- Event{Line: scanner.Text()}
 		}

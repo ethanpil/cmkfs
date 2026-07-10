@@ -51,6 +51,34 @@ func TestCombinedOutputOrder(t *testing.T) {
 	}
 }
 
+// TestHugeUnterminatedOutputDoesNotKillChild: newline-less output far beyond
+// any line buffer must stream through in chunks; the child must finish with
+// exit 0 and never be SIGPIPE-killed by a scanner overflow.
+func TestHugeUnterminatedOutputDoesNotKillChild(t *testing.T) {
+	// ~4 MiB of 'x' with no newline, like in-place mkfs progress output.
+	ch := Run(context.Background(),
+		[]string{"sh", "-c", `dd if=/dev/zero bs=1024 count=4096 2>/dev/null | tr '\0' 'x'; echo; echo done-marker`},
+		passGate)
+	lines, done := collect(t, ch)
+	if done.Exit != 0 || done.Aborted {
+		t.Fatalf("child must exit cleanly, got %+v", done)
+	}
+	total := 0
+	sawMarker := false
+	for _, l := range lines {
+		total += len(l)
+		if l == "done-marker" {
+			sawMarker = true
+		}
+	}
+	if total < 4*1024*1024 {
+		t.Errorf("output truncated: got %d bytes", total)
+	}
+	if !sawMarker {
+		t.Error("final line lost")
+	}
+}
+
 func TestExitCode(t *testing.T) {
 	ch := Run(context.Background(), []string{"sh", "-c", "exit 7"}, passGate)
 	_, done := collect(t, ch)

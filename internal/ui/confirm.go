@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/ethanpil/cmkfs/internal/cmdgen"
+	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/safety"
 )
 
@@ -29,6 +30,7 @@ func (a *App) enterConfirm() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 	a.devices = devs
+	a.list.refresh(a) // keep Screen 1's parallel report/depth slices in sync
 	found := false
 	for i := range devs {
 		if devs[i].Path == a.dev.Path {
@@ -74,6 +76,11 @@ func (a *App) enterConfirm() (tea.Model, tea.Cmd) {
 // report; nothing was spawned (spec §10.3 Screen 5).
 func (a *App) reenterConfirmFromGate(report safety.Report) {
 	a.report = report
+	// Rebuild the command: the fresh report may change the force decision,
+	// and the displayed/printed command must always match the shown findings.
+	if argv, display, err := cmdgen.Build(*a.fs, a.values, a.extra, a.dev.Path, report.NeedsForce()); err == nil {
+		a.argv, a.display = argv, display
+	}
 	ti := textinput.New()
 	ti.Prompt = ""
 	ti.CharLimit = 64
@@ -172,7 +179,7 @@ func (a *App) viewConfirm() string {
 
 	// Pane 2: target summary + findings from the fresh re-check.
 	d := a.dev
-	summary := fmt.Sprintf("%s  %s", d.Path, humanSizeLong(d.SizeBytes))
+	summary := fmt.Sprintf("%s  %s", d.Path, device.HumanSize(d.SizeBytes))
 	if d.Model != "" {
 		summary += "  " + d.Model
 	}
@@ -181,7 +188,7 @@ func (a *App) viewConfirm() string {
 	}
 	b.WriteString(styleHeader.Render(summary) + "\n")
 	for _, f := range a.report.Findings {
-		b.WriteString("  " + severityStyle(int(f.Severity)).Render(f.Message) + "\n")
+		b.WriteString("  " + severityStyle(f.Severity).Render(f.Message) + "\n")
 	}
 	if len(a.report.Findings) == 0 {
 		b.WriteString("  " + styleSuccess.Render("No safety findings.") + "\n")

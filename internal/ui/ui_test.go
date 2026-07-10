@@ -485,6 +485,118 @@ func TestVersionWarningShown(t *testing.T) {
 	}
 }
 
+// TestAdvancedCollapseClampsFocus: opening Advanced, tabbing to Continue,
+// then collapsing Advanced must not leave the focus index past the end of
+// the shrunken target list (regression: render panic).
+func TestAdvancedCollapseClampsFocus(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	press(a, "down", "enter", "enter")
+	focusOption(t, a, "journal") // non-text row so a is a hotkey
+	press(a, "a", "tab")         // open Advanced, jump to Continue (last target)
+	press(a, "up", "a")          // move onto a target that exists only while open, collapse
+	// Must not panic and must stay renderable.
+	_ = a.View()
+	if a.form.focus >= len(a.formTargets()) {
+		t.Fatalf("focus %d out of range of %d targets", a.form.focus, len(a.formTargets()))
+	}
+	// The original crash sequence: collapse while ON the last target.
+	press(a, "a", "tab", "a")
+	_ = a.View()
+}
+
+// TestDeviceListSurvivesGrowthDuringFlow: a device appearing between Screen 1
+// and Confirm must not desync the list's parallel slices (regression: panic
+// on Esc back to the device list).
+func TestDeviceListSurvivesGrowthDuringFlow(t *testing.T) {
+	devs := []device.Device{cleanDisk()}
+	cfg := testConfig(t, devs, nil)
+	grown := false
+	cfg.Discover = func(showLoop bool) ([]device.Device, error) {
+		if grown {
+			extra := cleanDisk()
+			extra.Path, extra.KName, extra.MajMin = "/dev/sdz", "sdz", "8:240"
+			return []device.Device{cleanDisk(), extra}, nil
+		}
+		return devs, nil
+	}
+	a := NewApp(cfg)
+	press(a, "down", "enter", "enter")
+	grown = true // a USB stick is plugged in while the form is open
+	press(a, "tab", "enter")
+	if a.screen != ScreenConfirm {
+		t.Fatalf("expected confirm, got %v", a.screen)
+	}
+	press(a, "esc", "esc", "esc") // back to the device list
+	if a.screen != ScreenDeviceList {
+		t.Fatalf("expected device list, got %v", a.screen)
+	}
+	_ = a.View() // must not panic on the grown list
+	press(a, "down", "down")
+	_ = a.View()
+}
+
+// TestGateBounceRebuildsCommand: after a gate failure the confirm screen must
+// show a command matching the fresh report's force decision.
+func TestGateBounceRebuildsCommand(t *testing.T) {
+	runCh := make(chan executor.Event, 1)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter", "tab", "enter", "right", "enter")
+	if a.screen != ScreenExecute {
+		t.Fatalf("expected execute, got %v", a.screen)
+	}
+	if strings.Contains(a.display, "-F") {
+		t.Fatalf("clean device must not have force: %q", a.display)
+	}
+	// Gate discovers a signature appeared: warning-only fresh report.
+	gateReport := safety.Report{Findings: []safety.Finding{
+		{Severity: safety.Warning, Code: "SIGNATURE_FS", Message: "Existing xfs filesystem will be destroyed."},
+	}}
+	a.Update(execEvMsg(executor.Event{Done: true, Exit: -1, Gate: &gateReport}))
+	if a.screen != ScreenConfirm {
+		t.Fatalf("expected confirm, got %v", a.screen)
+	}
+	if !strings.Contains(a.display, "mkfs.ext4 -F ") {
+		t.Fatalf("rebuilt command must include force after signature warning: %q", a.display)
+	}
+	if !a.confirm.typedMode {
+		t.Fatal("fresh warning must require typed confirmation")
+	}
+}
+
+// TestResultNewRunResetsSelections: 'n' on the result screen must not carry
+// the previous run's label/options/extra args to the next device.
+func TestResultNewRunResetsSelections(t *testing.T) {
+	runCh := make(chan executor.Event, 4)
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, runCh))
+	press(a, "down", "enter", "enter")
+	focusOption(t, a, "label")
+	typeText(a, "oldlabel")
+	focusOption(t, a, "journal")
+	press(a, "a")
+	a.form.focus = len(a.fs.Options)
+	typeText(a, "-E")
+	press(a, "enter")
+	press(a, "tab", "enter") // continue
+	typeText(a, "sde")       // extra arg forces typed confirmation
+	press(a, "enter")
+	a.Update(execEvMsg(executor.Event{Done: true, Exit: 0}))
+	if a.screen != ScreenResult {
+		t.Fatalf("expected result, got %v", a.screen)
+	}
+	press(a, "n")
+	if a.fs != nil || a.values != nil || a.extra != nil {
+		t.Fatalf("selections must reset: fs=%v values=%v extra=%v", a.fs, a.values, a.extra)
+	}
+	// A fresh run starts with defaults.
+	press(a, "down", "enter", "enter")
+	if a.values["label"] != "" {
+		t.Fatalf("label must be back to default, got %v", a.values["label"])
+	}
+	if len(a.extra) != 0 {
+		t.Fatalf("extra args must be cleared, got %v", a.extra)
+	}
+}
+
 func TestBoolToggleEmission(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	press(a, "down", "enter", "enter")

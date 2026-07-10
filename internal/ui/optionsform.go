@@ -273,6 +273,7 @@ func (a *App) updateOptionsForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case "a":
 			f.advancedOpen = !f.advancedOpen
+			a.formTarget() // collapsing shrinks the target list; re-clamp focus
 			return a, nil
 		case "c":
 			return a.formContinue()
@@ -377,8 +378,10 @@ func (a *App) viewOptionsForm() string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render(fmt.Sprintf("cmkfs — %s options for %s", a.fs.Name, a.dev.Path)) + "\n\n")
 
-	targets := a.formTargets()
-	cur := targets[f.focus]
+	// formTarget clamps f.focus: the target list shrinks when the Advanced
+	// section collapses or tokens are removed, and rendering must never
+	// index past its end.
+	cur := a.formTarget()
 
 	for _, o := range a.fs.Options {
 		focused := cur.kind == ftOption && cur.opt == o.ID

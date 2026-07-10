@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/safety"
 )
 
@@ -101,7 +102,7 @@ func (a *App) viewDeviceList() string {
 			}
 		}
 		row := fmt.Sprintf("  %-24s %8s  %-5s %-10s %-12s %-16s %s",
-			indent+d.Path, humanSize(d.SizeBytes), d.Type,
+			indent+d.Path, device.HumanSizeCompact(d.SizeBytes), d.Type,
 			trunc(d.FSType, 10), trunc(d.Label, 12), trunc(mount, 16), d.Model)
 		switch {
 		case i == a.list.cursor:
@@ -120,7 +121,7 @@ func (a *App) viewDeviceList() string {
 		if len(r.Findings) > 0 {
 			var parts []string
 			for _, f := range r.Findings {
-				parts = append(parts, severityStyle(int(f.Severity)).Render(f.Message))
+				parts = append(parts, severityStyle(f.Severity).Render(f.Message))
 			}
 			b.WriteString(strings.Join(parts, "  ") + "\n")
 		} else {
@@ -132,11 +133,12 @@ func (a *App) viewDeviceList() string {
 }
 
 func trunc(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s) // slice by runes, not bytes: never split a UTF-8 sequence
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
-		return s[:n]
+		return string(r[:n])
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
 }

@@ -1,0 +1,71 @@
+{
+   "blockdevices": [
+      {
+         "name": "/dev/sdx",
+         "kname": "/dev/sdx",
+         "maj:min": "8:112",
+         "type": "disk",
+         "size": 2000398934016,
+         "fstype": "mpath_member",
+         "label": null,
+         "uuid": null,
+         "pttype": null,
+         "mountpoints": [
+             null
+         ],
+         "model": "MSA 2050 SAN",
+         "serial": "6001438011112222",
+         "tran": "fc",
+         "rota": true,
+         "ro": false,
+         "rm": false,
+         "pkname": null,
+         "children": [
+            {
+               "name": "/dev/mapper/mpatha",
+               "kname": "/dev/dm-2",
+               "maj:min": "253:2",
+               "type": "mpath",
+               "size": 2000398934016,
+               "fstype": null,
+               "label": null,
+               "uuid": null,
+               "pttype": "gpt",
+               "mountpoints": [
+                   null
+               ],
+               "model": null,
+               "serial": null,
+               "tran": null,
+               "rota": true,
+               "ro": false,
+               "rm": false,
+               "pkname": "/dev/sdx",
+               "children": [
+                  {
+                     "name": "/dev/mapper/mpatha-part1",
+                     "kname": "/dev/dm-3",
+                     "maj:min": "253:3",
+                     "type": "part",
+                     "size": 2000397795328,
+                     "fstype": "ext4",
+                     "label": "san-data",
+                     "uuid": "7c6d5e4f-4444-4d8e-af60-123456789abc",
+                     "pttype": "gpt",
+                     "mountpoints": [
+                         "/srv/san"
+                     ],
+                     "model": null,
+                     "serial": null,
+                     "tran": null,
+                     "rota": true,
+                     "ro": false,
+                     "rm": false,
+                     "pkname": "/dev/mapper/mpatha"
+                  }
+               ]
+            }
+         ]
+      }
+   ]
+}

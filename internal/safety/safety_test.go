@@ -3,6 +3,7 @@ package safety
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -106,6 +107,48 @@ func TestActiveSwap(t *testing.T) {
 	// And transitively for the parent disk.
 	r = check(t, "/dev/sdb", nil)
 	assertFinding(t, r, Blocker, "ACTIVE_SWAP", "swapoff")
+}
+
+// TestActiveSwapAlias: swap enabled under an alias path (by-id/by-uuid) must
+// still be detected via kernel-name matching.
+func TestActiveSwapAlias(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "self"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	swaps := "Filename\t\tType\t\tSize\t\tUsed\t\tPriority\n" +
+		"/dev/some/alias/sdb2 partition\t8388604\t0\t-2\n"
+	if err := os.WriteFile(filepath.Join(dir, "swaps"), []byte(swaps), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "self", "mountinfo"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sys := System{ProcRoot: dir, SysRoot: t.TempDir()}
+	r := sys.Check(Params{Device: devByPath(t, "/dev/sdb2"), All: testDevices()})
+	assertFinding(t, r, Blocker, "ACTIVE_SWAP", "swapoff")
+}
+
+// TestSignaturePTableOnLoop: a whole non-disk device (loop image) carrying a
+// partition table must warn and force-inject like a disk would.
+func TestSignaturePTableOnLoop(t *testing.T) {
+	loop := device.Device{Path: "/dev/loop7", KName: "loop7", MajMin: "7:7", Type: "loop", SizeBytes: 2147483648, PTType: "gpt"}
+	r := testSystem(t).Check(Params{Device: loop, All: []device.Device{loop}})
+	assertFinding(t, r, Warning, "SIGNATURE_PTABLE", "Existing gpt partition table will be destroyed.")
+	if !r.NeedsForce() {
+		t.Error("partition table on a loop device must trigger force injection")
+	}
+}
+
+// TestSignaturePTableNotOnPartition: a partition's PTType reflects the table
+// it belongs to, not one inside it — no warning.
+func TestSignaturePTableNotOnPartition(t *testing.T) {
+	part := devByPath(t, "/dev/sdc1")
+	part.PTType = "dos" // as lsblk reports for members of a dos-labelled disk
+	r := testSystem(t).Check(Params{Device: part, All: testDevices()})
+	if r.Has("SIGNATURE_PTABLE") {
+		t.Error("SIGNATURE_PTABLE must not fire for a partition")
+	}
 }
 
 func TestReadOnlyFromLsblk(t *testing.T) {

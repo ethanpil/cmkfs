@@ -92,13 +92,14 @@ func run() (code int) {
 	sys := safety.System{ProbeExcl: safety.ProbeExclusive}
 
 	cfg := ui.Config{
-		Schemas:   schema.Schemas,
-		Backends:  backends,
-		Sys:       sys,
-		Discover:  device.Discover,
-		ShowLoop:  *showLoop,
-		PrintMode: *printCmd,
-		Version:   version,
+		Schemas:        schema.Schemas,
+		Backends:       backends,
+		Sys:            sys,
+		Discover:       device.Discover,
+		ShowLoop:       *showLoop,
+		PrintMode:      *printCmd,
+		InitialDevices: devices, // reuse the startup enumeration
+		Version:        version,
 	}
 
 	// Positional device: explicit user intent, so it skips Screen 1 — all

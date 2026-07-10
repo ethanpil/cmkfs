@@ -45,8 +45,14 @@ func (a *App) finishExecution(ev executor.Event) {
 func (a *App) updateResult(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "n":
-		// Format another device: back to a refreshed Screen 1.
+		// Format another device: back to a refreshed Screen 1 with ALL
+		// selections cleared — the previous run's label, options, and extra
+		// arguments must never silently carry over to a different device.
 		a.dev = nil
+		a.fs = nil
+		a.values = nil
+		a.extra = nil
+		a.form = formState{}
 		a.report = safety.Report{}
 		a.refreshDevices()
 		a.list.cursor = -1

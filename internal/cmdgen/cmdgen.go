@@ -139,10 +139,10 @@ func ValidateValue(s schema.Schema, o schema.Option, v any) error {
 			return fmt.Errorf("%s: %v", o.Name, err)
 		}
 		if o.Min != nil && bytes < *o.Min {
-			return fmt.Errorf("%s: must be between %d and %d bytes", o.Name, *o.Min, *o.Max)
+			return fmt.Errorf("%s: must be between %s and %s bytes", o.Name, boundStr(o.Min), boundStr(o.Max))
 		}
 		if o.Max != nil && bytes > *o.Max {
-			return fmt.Errorf("%s: must be between %d and %d bytes", o.Name, *o.Min, *o.Max)
+			return fmt.Errorf("%s: must be between %s and %s bytes", o.Name, boundStr(o.Min), boundStr(o.Max))
 		}
 	case schema.KindString:
 		sv := v.(string)

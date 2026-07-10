@@ -78,6 +78,19 @@ func FuzzBuild(f *testing.F) {
 		if argv[len(argv)-1] != device {
 			t.Fatalf("device %q is not the final argv element: %q", device, argv)
 		}
+		// "{value}" is the flag-template placeholder, but it is also a
+		// perfectly legal user string: a label, a device path, or an extra
+		// argument may contain it verbatim, and validation neither does nor
+		// should reject it (there is no shell; the token reaches mkfs as-is).
+		// Enum and size values equal to it are rejected by ValidateValue, so
+		// the only argv carriers are these free-form inputs. When one of them
+		// carries it, a "{value}" in argv is genuine content, not an
+		// unsubstituted template.
+		freeformHasPlaceholder := strings.Contains(label, "{value}") ||
+			strings.Contains(device, "{value}") ||
+			strings.Contains(extra1, "{value}") ||
+			strings.Contains(extra2, "{value}")
+
 		devCount := 0
 		for _, a := range argv {
 			if a == device {
@@ -86,7 +99,7 @@ func FuzzBuild(f *testing.F) {
 			if a == "" {
 				t.Fatalf("empty argv element in %q", argv)
 			}
-			if strings.Contains(a, "{value}") {
+			if !freeformHasPlaceholder && strings.Contains(a, "{value}") {
 				t.Fatalf("unsubstituted {value} in %q", argv)
 			}
 		}

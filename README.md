@@ -14,31 +14,6 @@ and executor: its entire job is to build a correct argv for the system's
 `mkfs.ext4`, `mkfs.xfs`, or `mkfs.btrfs` binary and run it as a subprocess.
 No shell is ever involved.
 
-## Safety is the core feature
-
-- Refuses mounted devices, active swap, and read-only devices.
-- Refuses anything backing the running system (`/`, `/boot`, `/boot/efi`, `/usr`).
-- Detects devices held by LVM, dm-crypt, md, or multipath (transitively).
-- Detects existing filesystem signatures and partition tables; overwriting
-  them requires typing the device name, and only then is the backend's
-  force flag injected.
-- Always shows the exact command before execution.
-- Re-checks everything immediately before spawning `mkfs`: if the device was
-  mounted, changed, or claimed between your confirmation and execution, the
-  run is aborted (nothing ever executes against a stale confirmation).
-- A single Ctrl+C never kills a running format; a deliberate
-  double-Ctrl+C + typed `ABORT` flow always can.
-
-## Requirements
-
-- Linux (amd64 or arm64). The release binary is fully static.
-- Root (`sudo cmkfs`).
-- `lsblk` from util-linux ≥ 2.33 (present on effectively every system).
-- Whichever backends you want to use: `mkfs.ext4` (e2fsprogs),
-  `mkfs.xfs` (xfsprogs), `mkfs.btrfs` (btrfs-progs). Missing backends are
-  simply greyed out in the picker.
-- A terminal of at least 80x24.
-
 ## Usage
 
 ```
@@ -52,6 +27,16 @@ cmkfs --version            # version, commit, embedded schema ids
 There is deliberately no `--yes` / non-interactive mode: scripting users
 should use `mkfs` directly — press `p` on the confirm screen (or use
 `--print`) and cmkfs hands you the exact, copy-paste-runnable command.
+
+## Requirements
+
+- Linux (amd64 or arm64). The release binary is fully static.
+- Root (`sudo cmkfs`).
+- `lsblk` from util-linux ≥ 2.33 (present on effectively every system).
+- Whichever backends you want to use: `mkfs.ext4` (e2fsprogs),
+  `mkfs.xfs` (xfsprogs), `mkfs.btrfs` (btrfs-progs). Missing backends are
+  simply greyed out in the picker.
+- A terminal of at least 80x24.
 
 ## Keys
 
@@ -78,6 +63,21 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 | 5 | Positional device argument is blocked by a safety finding |
 | 6 | Internal error |
 
+## Safety
+
+- Refuses mounted devices, active swap, and read-only devices.
+- Refuses anything backing the running system (`/`, `/boot`, `/boot/efi`, `/usr`).
+- Detects devices held by LVM, dm-crypt, md, or multipath (transitively).
+- Detects existing filesystem signatures and partition tables; overwriting
+  them requires typing the device name, and only then is the backend's
+  force flag injected.
+- Always shows the exact command before execution.
+- Re-checks everything immediately before spawning `mkfs`: if the device was
+  mounted, changed, or claimed between your confirmation and execution, the
+  run is aborted (nothing ever executes against a stale confirmation).
+- A single Ctrl+C never kills a running format; a deliberate
+  double-Ctrl+C + typed `ABORT` flow always can.
+
 ## Building
 
 ```
@@ -94,7 +94,7 @@ go test ./...                                   # unit tests, no root needed
 sudo go test -tags integration ./integration/   # loop-device tests, root + Linux
 ```
 
-## Release status
+## Changelog
 
 v0.1.0-beta.1 is a beta: the automated suites (unit, fuzz, loop-device
 integration) pass in CI, but the manual hardware checklist (real USB

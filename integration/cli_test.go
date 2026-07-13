@@ -20,6 +20,14 @@ func buildBinary(t *testing.T) string {
 	if binaryPath != "" {
 		return binaryPath
 	}
+	// Allow running the CLI tests against a prebuilt binary on a target that
+	// has no Go toolchain or source tree (e.g. a bare test VM): set
+	// CMKFS_BIN=/path/to/cmkfs. The path must be executable by an unprivileged
+	// user, since TestCLIExitNotRoot re-execs it as nobody.
+	if bin := os.Getenv("CMKFS_BIN"); bin != "" {
+		binaryPath = bin
+		return binaryPath
+	}
 	out := filepath.Join(os.TempDir(), "cmkfs-integration-test")
 	cmd := exec.Command("go", "build", "-o", out, "github.com/ethanpil/cmkfs/cmd/cmkfs")
 	cmd.Dir = ".."

@@ -673,6 +673,20 @@ func TestViewsFitWidth(t *testing.T) {
 	a.confirm = confirmState{typedMode: true}
 	a.screen = ScreenConfirm
 	checkFit("confirm long finding + model")
+
+	// Device list: an over-long device-mapper path, a long model, and a long
+	// safety finding must all stay within the window.
+	wide := cleanDisk()
+	wide.Path = "/dev/mapper/" + strings.Repeat("x", 44)
+	wide.Model = strings.Repeat("M", 60)
+	a.devices = []device.Device{wide}
+	a.list.refresh(a) // recomputes reports; overwrite the focused one below
+	a.list.reports[0] = safety.Report{Findings: []safety.Finding{
+		{Severity: safety.Warning, Code: "SIGNATURE_FS", Message: "Existing ext4 filesystem " + strings.Repeat("z", 90) + " will be destroyed."},
+	}}
+	a.list.cursor = 0
+	a.screen = ScreenDeviceList
+	checkFit("device list long row + finding")
 }
 
 func TestBoolToggleEmission(t *testing.T) {

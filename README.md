@@ -180,3 +180,62 @@ loop-device integration) pass in CI, but the manual hardware checklist
 (real USB sticks, live abort testing, terminal-resize scenarios) has not
 been signed off yet. Treat it accordingly — and read the confirm screen
 before typing the device name.
+
+## Testing
+
+"Battle-tested" is earned over years of real-world use on countless
+machines. cmkfs is new, AI-assisted, and it formats disks — so skepticism
+is fair, and we won't pretend to a track record we haven't earned yet.
+What we can do is test relentlessly, gate every release on it, and show you
+exactly what that covers so you can judge for yourself. The source and the
+suite are open; every check below is reproducible.
+
+Every tagged release must pass the entire automated suite in CI before any
+artifact is published — nothing ships red — and the release tag re-runs the
+unit suite before the binaries are built. On top of that, we validate the
+real binary on real disks (see *On real hardware*).
+
+### The harness
+
+| Layer | Command | When |
+|---|---|---|
+| Unit + UI state-machine + fuzz seeds | `go test ./...` | every push / PR, no root |
+| Fuzz smoke | `go test -fuzz=FuzzBuild -fuzztime=30s ./internal/cmdgen/` | every push / PR |
+| Loop-device integration | `sudo go test -tags integration ./integration/` | CI, as root, against the real `mkfs.*` backends |
+| Lint + static build matrix | `golangci-lint` + amd64/arm64 build | asserts a static binary, compiled-in schema, and a Charm-only dependency graph |
+
+### What is verified — and why it matters
+
+**The command builder** — the one function between your keystrokes and a destructive `mkfs`:
+- Byte-exact golden command for every filesystem and option combination — the exact argv is pinned, so a schema edit can't silently change what runs.
+- Fuzzed with random and hostile input — never panics; the device path is always the final argument and appears exactly once; no unsubstituted placeholder ever leaks into the command; force / whole-disk flags land only in their correct position.
+- Extra-argument guardrails — a token that is empty, contains a newline, equals the device path, starts with `/dev/`, or duplicates an app-controlled flag is rejected, so the "advanced" escape hatch can't retarget the command or smuggle a flag past the safety flow.
+- Deterministic and shell-safe — identical input yields identical output, and the previewed / `--print` command is copy-paste-safe and byte-identical to what executes.
+
+**Schema integrity** — every filesystem definition is checked against the structural rules (unique IDs, symmetric conflicts, valid defaults, well-formed flag templates, help-length caps). A malformed schema fails the build, not your disk.
+
+**Refusals — the accidents that lose data:**
+- Mounted devices, active swap, and read-only devices.
+- Anything backing the running system (`/`, `/boot`, `/usr`) — including when it's reached through a child partition of a whole disk you selected.
+- Devices held by LVM, dm-crypt, md, or multipath (verified against real stacks).
+- Devices another process holds exclusively (`O_EXCL`).
+- Targets too small for the chosen filesystem.
+
+Each is proven to stop the run *before* any format begins.
+
+**Confirmation and execution:**
+- Existing filesystem signatures and partition tables are detected and require you to type the device name before the backend's force flag is injected.
+- A final re-check runs immediately before spawning `mkfs`: if the device was mounted, changed, or claimed since you confirmed, the run aborts and the disk is left untouched.
+- A failing `mkfs` is reported with its exit code and output — never dressed up as success.
+- A running format survives a stray Ctrl+C; only a deliberate double-Ctrl+C then typed `ABORT` cancels it.
+
+**The terminal UI** — the whole screen flow is driven by synthetic keystrokes and asserted (navigation, live validation, quit prompts, exit codes), and every screen is checked to fit an 80×24 terminal. The UI is the last thing between a user and a mistake; it has to behave on the smallest terminal we support.
+
+**On real hardware** — loop devices and fixtures only go so far, so we also drive the *actual* binary through a real terminal on an Alpine Linux VM with real disks and the real backends: format real disks as all six filesystems; confirm version detection against the shipped tool versions; reproduce every refusal above against genuine LVM, dm-crypt, and mdadm setups; confirm whole-disk handling against a `mkfs.fat` that really does refuse without `-I`; and confirm color on a bare serial console plus correct layout at 80 columns. It is the closest we get to "does it behave on a real machine."
+
+### What testing can't do
+
+None of this replaces years in the field, and we don't claim it does. That
+is exactly why cmkfs always shows you the exact command and makes you
+confirm before it touches anything: the tests are how we build our own
+confidence, but the last check is yours. Read the confirm screen.

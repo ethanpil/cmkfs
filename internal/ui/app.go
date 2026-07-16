@@ -38,6 +38,9 @@ type Config struct {
 	Backends map[string]device.Backend // keyed by schema Binary
 	Sys      safety.System
 	Discover func(showLoop bool) ([]device.Device, error)
+	// Details gathers the info-screen extras for one device; defaults to
+	// device.CollectDetails (injectable like Discover for testability).
+	Details func(device.Device) device.Details
 	Run      func(ctx context.Context, argv []string, gate func() (safety.Report, bool)) <-chan executor.Event
 	ShowLoop bool
 	// PrintMode: after Confirm, print the command instead of executing
@@ -91,6 +94,9 @@ type App struct {
 func NewApp(cfg Config) *App {
 	if cfg.Run == nil {
 		cfg.Run = executor.Run
+	}
+	if cfg.Details == nil {
+		cfg.Details = device.CollectDetails
 	}
 	a := &App{cfg: cfg, width: minWidth, height: minHeight}
 	a.list.cursor = -1 // nothing pre-selected: cursor starts on the header row
@@ -243,6 +249,14 @@ func (a *App) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
+	// Device-information overlay on the device list.
+	if a.screen == ScreenDeviceList && a.list.infoOpen {
+		if key == "i" || key == "esc" || key == "q" {
+			a.list.infoOpen = false
+		}
+		return a, nil
+	}
+
 	// Long-help overlay on the options form.
 	if a.screen == ScreenOptionsForm && a.form.overlayOpt != "" {
 		if key == "esc" || key == "q" || key == "h" {
@@ -319,6 +333,9 @@ func (a *App) View() string {
 	if a.helpOverlay {
 		return a.viewHelpOverlay()
 	}
+	if a.screen == ScreenDeviceList && a.list.infoOpen {
+		return a.viewDeviceInfo()
+	}
 	switch a.screen {
 	case ScreenDeviceList:
 		return a.viewDeviceList()
@@ -344,6 +361,7 @@ func (a *App) viewHelpOverlay() string {
 		{"q, F10", "Quit (confirmation past filesystem pick; disabled during execution)"},
 		{"?", "Toggle this help"},
 		{"r", "Refresh device list (device list only)"},
+		{"i", "Full information for the highlighted device (device list only)"},
 		{"h", "Extended help for the focused option (options form)"},
 		{"a", "Expand Advanced — Extra Arguments (options form)"},
 		{"p", "Print the command and exit instead of executing (confirm screen)"},

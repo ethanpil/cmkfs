@@ -783,6 +783,55 @@ func TestDeviceListDynamicColumns(t *testing.T) {
 	}
 }
 
+// TestDeviceInfoScreen: i on a highlighted device opens the full-information
+// overlay (fed by the injectable Details collector); i/Esc/q close it without
+// quitting the app.
+func TestDeviceInfoScreen(t *testing.T) {
+	dev := signedPart()
+	dev.Mountpoints = []string{"/data"}
+	dev.Serial = "S6PENL0T123456"
+	cfg := testConfig(t, []device.Device{dev}, nil)
+	cfg.Details = func(d device.Device) device.Details {
+		return device.Details{
+			Mounts:            []device.MountUsage{{Mountpoint: "/data", TotalBytes: 1 << 30, FreeBytes: 1 << 29}},
+			LogicalBlockSize:  512,
+			PhysicalBlockSize: 4096,
+			TempCelsius:       43.5,
+			HasTemp:           true,
+		}
+	}
+	a := NewApp(cfg)
+
+	press(a, "i") // header row focused: no device, no overlay
+	if a.list.infoOpen {
+		t.Fatal("i on the header row must not open the overlay")
+	}
+	press(a, "down", "i")
+	if !a.list.infoOpen {
+		t.Fatal("i on a device must open the overlay")
+	}
+	view := a.View()
+	for _, want := range []string{
+		"/dev/sdf1", "5a4b3c2d-3333-4c7d-9e5f-0123456789ab", "S6PENL0T123456",
+		"/data — 512 MiB free of 1 GiB", "512 B logical / 4096 B physical", "43.5 °C",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("info view missing %q:\n%s", want, view)
+		}
+	}
+	// q closes the overlay without quitting.
+	if cmd := press(a, "q"); cmd != nil {
+		t.Fatal("q must close the overlay, not quit")
+	}
+	if a.list.infoOpen || a.screen != ScreenDeviceList {
+		t.Fatal("overlay must close back to the device list")
+	}
+	press(a, "i", "esc")
+	if a.list.infoOpen {
+		t.Fatal("Esc must close the overlay")
+	}
+}
+
 func TestBoolToggleEmission(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	press(a, "down", "enter", "enter")

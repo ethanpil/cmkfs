@@ -17,6 +17,12 @@ type listState struct {
 	cursor  int // -1 = header row
 	reports []safety.Report
 	depths  []int
+
+	// Device-information overlay (key i): the device is captured at open
+	// time so a refresh underneath cannot desync it.
+	infoOpen bool
+	infoDev  device.Device
+	details  device.Details
 }
 
 func (l *listState) refresh(a *App) {
@@ -56,6 +62,12 @@ func (a *App) updateDeviceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		a.refreshDevices()
+	case "i":
+		if a.list.cursor >= 0 && a.list.cursor < len(a.devices) {
+			a.list.infoDev = a.devices[a.list.cursor]
+			a.list.details = a.cfg.Details(a.list.infoDev)
+			a.list.infoOpen = true
+		}
 	case "enter":
 		if a.list.cursor < 0 || a.list.cursor >= len(a.devices) {
 			break
@@ -156,7 +168,7 @@ func (a *App) viewDeviceList() string {
 	// Key hints sit directly under the table so they never move; the focused
 	// device's findings render below them (spec §10.3).
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render("↑/↓ move · Enter select · r refresh · ? keys · q quit") + "\n\n")
+	b.WriteString(styleHelp.Render(trunc("↑/↓ move · Enter select · i info · r refresh · ? keys · q quit", a.width)) + "\n\n")
 	if a.list.cursor >= 0 && a.list.cursor < len(a.devices) {
 		r := a.list.reports[a.list.cursor]
 		if len(r.Findings) > 0 {
@@ -169,6 +181,82 @@ func (a *App) viewDeviceList() string {
 			b.WriteString(styleSuccess.Render("No safety findings.") + "\n")
 		}
 	}
+	return b.String()
+}
+
+// viewDeviceInfo renders the full-screen information overlay for the device
+// captured when i was pressed. Values come from the enumeration plus the
+// best-effort Details extras; unknown values render as "—".
+func (a *App) viewDeviceInfo() string {
+	d := a.list.infoDev
+	det := a.list.details
+	var b strings.Builder
+	b.WriteString(styleTitle.Render("cmkfs — device information") + "\n\n")
+
+	dash := func(s string) string {
+		if s == "" {
+			return "—"
+		}
+		return s
+	}
+	yesNo := func(v bool) string {
+		if v {
+			return "yes"
+		}
+		return "no"
+	}
+	// The key is styled, so only the plain value goes through trunc (ANSI
+	// escapes would be miscounted): 2 indent + 18 key + 1 gap = 21 columns.
+	row := func(k, v string) {
+		b.WriteString("  " + styleHeader.Render(fmt.Sprintf("%-18s", k)) + " " + trunc(v, max(a.width-21, 1)) + "\n")
+	}
+
+	row("Path", d.Path)
+	row("Kernel name", dash(d.KName))
+	row("Maj:min", dash(d.MajMin))
+	row("Type", dash(d.Type))
+	row("Size", fmt.Sprintf("%s (%d bytes)", device.HumanSize(d.SizeBytes), d.SizeBytes))
+	row("Model", dash(d.Model))
+	row("Serial", dash(d.Serial))
+	row("Transport", dash(d.Transport))
+	row("Rotational", yesNo(d.Rotational))
+	row("Removable", yesNo(d.Removable))
+	row("Read-only", yesNo(d.ReadOnly))
+	row("Filesystem", dash(d.FSType))
+	row("Label", dash(d.Label))
+	row("UUID", dash(d.UUID))
+	row("Partition table", dash(d.PTType))
+	row("Parent", dash(d.Parent))
+	row("Children", dash(strings.Join(d.Children, ", ")))
+
+	// One row per mountpoint, with statfs usage where it could be gathered.
+	usage := map[string]device.MountUsage{}
+	for _, m := range det.Mounts {
+		usage[m.Mountpoint] = m
+	}
+	if len(d.Mountpoints) == 0 {
+		row("Mounted at", "—")
+	}
+	for i, m := range d.Mountpoints {
+		k := ""
+		if i == 0 {
+			k = "Mounted at"
+		}
+		v := m
+		if u, ok := usage[m]; ok {
+			v = fmt.Sprintf("%s — %s free of %s", m, device.HumanSize(u.FreeBytes), device.HumanSize(u.TotalBytes))
+		}
+		row(k, v)
+	}
+
+	if det.LogicalBlockSize > 0 {
+		row("Block size", fmt.Sprintf("%d B logical / %d B physical", det.LogicalBlockSize, det.PhysicalBlockSize))
+	}
+	if det.HasTemp {
+		row("Temperature", fmt.Sprintf("%.1f °C", det.TempCelsius))
+	}
+
+	b.WriteString("\n" + styleHelp.Render("Press i or Esc to close."))
 	return b.String()
 }
 

@@ -95,9 +95,12 @@ func (a *App) updateDeviceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.list.infoVP.SetYOffset(0)
 			// Off the event loop: statfs can hang on a wedged mount and the
 			// temperature read wakes a sleeping drive. The screen opens now
-			// and fills in when the answer arrives.
+			// and fills in when the answer arrives. The command closes over
+			// the collector and a copy of the device, never the model — it
+			// runs on its own goroutine while Update keeps mutating that.
+			collect := a.cfg.Details
 			return a, func() tea.Msg {
-				return detailsMsg{path: d.Path, details: a.cfg.Details(d)}
+				return detailsMsg{path: d.Path, details: collect(d)}
 			}
 		}
 	case "enter":

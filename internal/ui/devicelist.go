@@ -247,7 +247,11 @@ func (a *App) viewDeviceInfo() string {
 	}
 
 	if det.LogicalBlockSize > 0 {
-		row("Block size", fmt.Sprintf("%d B logical / %d B physical", det.LogicalBlockSize, det.PhysicalBlockSize))
+		size := fmt.Sprintf("%d B logical", det.LogicalBlockSize)
+		if det.PhysicalBlockSize > 0 { // 0 means unknown, not a zero-byte sector
+			size += fmt.Sprintf(" / %d B physical", det.PhysicalBlockSize)
+		}
+		row("Block size", size)
 	}
 	if det.HasTemp {
 		row("Temperature", fmt.Sprintf("%.1f °C", det.TempCelsius))

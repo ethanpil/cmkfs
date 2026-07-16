@@ -1,0 +1,198 @@
+.TH CMKFS 8 "2026-07-16" "cmkfs" "System Administration Commands"
+.SH NAME
+cmkfs \- terminal UI front-end for the mkfs family
+.SH SYNOPSIS
+.B cmkfs
+.RI [ flags ]
+.RI [ device ]
+.SH DESCRIPTION
+.B cmkfs
+is a terminal UI front-end for the
+.BR mkfs. *
+filesystem creation tools, in the same spirit that
+.BR cfdisk (8)
+is a front-end for disk partitioning. It guides you through selecting a
+block device, choosing a filesystem, configuring a curated set of options
+with built-in help, previewing the exact command that will run, and
+executing it with live output.
+.PP
+.B cmkfs
+never implements filesystem creation itself. It builds an argv for the
+system's
+.BR mkfs. *
+binary and runs it as a subprocess. No shell is involved at any point.
+.PP
+Supported filesystems are ext4
+.RB ( mkfs.ext4 ),
+XFS
+.RB ( mkfs.xfs ),
+Btrfs
+.RB ( mkfs.btrfs ),
+FAT32
+.RB ( mkfs.fat ),
+exFAT
+.RB ( mkfs.exfat ),
+and F2FS
+.RB ( mkfs.f2fs ).
+Backends that are not installed are greyed out in the picker.
+.PP
+.B cmkfs
+requires root and a terminal of at least 80x24.
+.PP
+If
+.I device
+is given, the device list is skipped and that device is used as the target.
+All safety checks still apply.
+.SH OPTIONS
+.TP
+.BR \-p ", " \-\-print
+After the confirmation screen, print the command to stdout instead of
+executing it. The printed command is copy-paste runnable and byte-identical
+to what would have been executed.
+.TP
+.B \-\-show\-loop
+Include loop devices in the device list. They are hidden by default.
+.TP
+.B \-\-version
+Print the version, commit, build date, and the ids of the compiled-in
+filesystem schemas, then exit.
+.SH KEYS
+.TP
+.BR Up / Down ", " j / k
+Move the selection.
+.TP
+.B Enter
+Select or advance.
+.TP
+.B Esc
+Go back one screen. Disabled during execution.
+.TP
+.BR q ", " F10
+Quit. Past the filesystem pick this prompts for confirmation. Disabled
+during execution.
+.TP
+.B ?
+Toggle the help overlay, which lists these keys.
+.TP
+.B r
+Refresh the device list. Device list only.
+.TP
+.B i
+Show full information for the highlighted device: every enumerated field
+plus free space, block size, and drive temperature where the kernel exposes
+them. Device list only.
+.TP
+.B h
+Extended help for the focused option. Options form only.
+.TP
+.B a
+Expand the Advanced \(em Extra Arguments section. Options form only.
+.TP
+.B p
+Print the command and exit instead of executing. Confirm screen only.
+.SH SAFETY
+.B cmkfs
+refuses to format mounted devices, active swap, read-only devices, anything
+backing the running system
+.RI ( / ", " /boot ", " /boot/efi ", " /usr ),
+devices held by LVM, dm-crypt, md, or multipath, and devices another process
+holds exclusively.
+.PP
+Existing filesystem signatures and partition tables are detected and
+reported. Overwriting them requires typing the device name; only then is the
+backend's force flag supplied. The FAT and exFAT tools overwrite signatures
+unconditionally and have no force flag, so for those the typed confirmation
+is the only guard.
+.PP
+The exact command is always shown before execution. Every check is repeated
+immediately before
+.B mkfs
+is spawned: if the device was mounted, changed, or claimed between the
+confirmation and execution, the run is aborted. Nothing executes against a
+stale confirmation.
+.PP
+A single Ctrl+C never kills a running format. A deliberate double Ctrl+C
+followed by typing
+.B ABORT
+does.
+.PP
+There is no non-interactive mode. Scripting users should invoke
+.BR mkfs. *
+directly; use
+.B \-\-print
+to obtain the exact command.
+.SH EXIT STATUS
+.TP
+.B 0
+Normal exit. This includes the case where the backend ran and failed \(em
+that failure is reported in the UI, with its exit code and output.
+.TP
+.B 2
+Usage error.
+.TP
+.B 3
+Environment error: lsblk missing or unparseable, or no TTY.
+.TP
+.B 4
+Not root.
+.TP
+.B 5
+The positional device argument is blocked by a safety finding.
+.TP
+.B 6
+Internal error.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+If set, disables color.
+.TP
+.B CLICOLOR_FORCE
+If set, forces color. cmkfs sets this itself when
+.B TERM
+starts with
+.B vt
+(vt100, vt220, and similar serial and VM consoles), whose terminfo reports
+no color capability even though the emulator renders it. An explicit
+.B NO_COLOR
+or
+.B CLICOLOR_FORCE
+from the environment always wins.
+.SH REQUIREMENTS
+Linux on amd64 or arm64.
+.BR lsblk (8)
+from util-linux 2.33 or newer. Root. A terminal of at least 80x24. The
+relevant
+.BR mkfs. *
+backend for whichever filesystem you intend to create.
+.SH EXAMPLES
+Start at the device list:
+.PP
+.RS
+.B sudo cmkfs
+.RE
+.PP
+Target a device directly, skipping the device list:
+.PP
+.RS
+.B sudo cmkfs /dev/sdb1
+.RE
+.PP
+Build the command interactively but print it instead of running it:
+.PP
+.RS
+.B sudo cmkfs \-p /dev/sdb1
+.RE
+.SH SEE ALSO
+.BR mkfs (8),
+.BR mkfs.ext4 (8),
+.BR mkfs.xfs (8),
+.BR mkfs.btrfs (8),
+.BR mkfs.fat (8),
+.BR mkfs.exfat (8),
+.BR mkfs.f2fs (8),
+.BR cfdisk (8),
+.BR lsblk (8)
+.SH BUGS
+Report bugs at https://github.com/ethanpil/cmkfs/issues
+.SH AUTHOR
+Ethan Piliavin <ethan@piliavin.com>

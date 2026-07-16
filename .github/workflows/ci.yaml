@@ -19,6 +19,12 @@ jobs:
       - uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+      # Roff fails quietly — a bad macro just renders wrong — and the man
+      # page ships in every package, so lint it where a renderer exists.
+      - name: Lint the man page
+        run: |
+          sudo apt-get update && sudo apt-get install -y mandoc
+          mandoc -T lint -W warning docs/cmkfs.8
 
   unit:
     runs-on: ubuntu-latest

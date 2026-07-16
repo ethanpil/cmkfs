@@ -4,6 +4,13 @@ version: 2
 
 project_name: cmkfs
 
+before:
+  hooks:
+    # nfpm installs contents verbatim — it does not compress by extension —
+    # and dpkg/rpm/apk all expect man pages gzipped under man8, so compress
+    # it here rather than shipping roff in a file named .gz.
+    - gzip -9 -kf docs/cmkfs.8
+
 builds:
   - main: ./cmd/cmkfs
     env:
@@ -26,6 +33,7 @@ archives:
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - README.md
+      - docs/cmkfs.8
 
 nfpms:
   - package_name: cmkfs
@@ -42,6 +50,11 @@ nfpms:
       options, and safe execution with typed confirmation.
     dependencies:
       - util-linux
+    contents:
+      - src: docs/cmkfs.8.gz
+        dst: /usr/share/man/man8/cmkfs.8.gz
+        file_info:
+          mode: 0644
 
 checksum:
   name_template: checksums.txt

@@ -24,6 +24,9 @@ go.work.sum
 # env file
 .env
 
+# Generated from docs/cmkfs.8 by the goreleaser before-hook
+docs/cmkfs.8.gz
+
 # AI Stuff
 docs/spec.md
 .claude

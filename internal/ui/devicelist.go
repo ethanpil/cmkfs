@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/safety"
@@ -92,13 +95,12 @@ func (a *App) viewDeviceList() string {
 		return b.String()
 	}
 
-	// Every column takes exactly the width its content needs, so short paths
-	// leave more room for MODEL. When that still overflows the window, MODEL
-	// and then LABEL shrink to their header widths with an ellipsis implying
-	// there is more; the whole-row clamp is the backstop for anything else.
-	const colLabel, colModel = 4, 6
-	headerCells := [7]string{"PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL"}
-	rows := make([][7]string, len(a.devices))
+	// lipgloss sizes each column to its content and, when the total exceeds
+	// the window, takes the space back from the columns with the most slack
+	// first, truncating with an ellipsis that implies more (spec §10.3).
+	// Everything is measured in display cells, so wide (CJK) glyphs cannot
+	// overrun the window the way a rune count would let them.
+	rows := make([][]string, len(a.devices))
 	for i, d := range a.devices {
 		mount := ""
 		if len(d.Mountpoints) > 0 {
@@ -107,81 +109,76 @@ func (a *App) viewDeviceList() string {
 				mount += fmt.Sprintf(" (+%d)", len(d.Mountpoints)-1)
 			}
 		}
-		indent := strings.Repeat("  ", a.list.depths[i])
-		rows[i] = [7]string{indent + d.Path, device.HumanSizeCompact(d.SizeBytes),
-			d.Type, d.FSType, d.Label, mount, d.Model}
-	}
-	var w [7]int
-	for c, h := range headerCells {
-		w[c] = len(h)
-	}
-	for _, r := range rows {
-		for c, cell := range r {
-			if n := len([]rune(cell)); n > w[c] {
-				w[c] = n
-			}
+		rows[i] = []string{
+			strings.Repeat("  ", a.list.depths[i]) + d.Path,
+			device.HumanSizeCompact(d.SizeBytes), d.Type,
+			d.FSType, d.Label, mount, d.Model,
 		}
 	}
-	total := func() int {
-		t := 2 + 2*6 // leading indent + six two-space gaps
-		for _, x := range w {
-			t += x
-		}
-		return t
-	}
-	for _, c := range []int{colModel, colLabel} {
-		if over := total() - a.width; over > 0 {
-			w[c] = max(w[c]-over, len(headerCells[c]))
-		}
-	}
-	line := func(cells [7]string) string {
-		cells[colLabel] = trunc(cells[colLabel], w[colLabel])
-		cells[colModel] = trunc(cells[colModel], w[colModel])
-		return trunc(fmt.Sprintf("  %-*s  %*s  %-*s  %-*s  %-*s  %-*s  %s",
-			w[0], cells[0], w[1], cells[1], w[2], cells[2], w[3], cells[3],
-			w[4], cells[4], w[5], cells[5], cells[6]), a.width)
-	}
-
-	header := line(headerCells)
-	if a.list.cursor == -1 {
-		b.WriteString(styleSelected.Render(header) + "\n")
-	} else {
-		b.WriteString(styleHeader.Render(header) + "\n")
-	}
+	b.WriteString(a.deviceTable(rows) + "\n")
 
 	if len(a.devices) == 0 {
 		b.WriteString(styleDim.Render("  (no block devices found)") + "\n")
 	}
 
-	for i := range rows {
-		row := line(rows[i])
-		switch {
-		case i == a.list.cursor:
-			b.WriteString(styleSelected.Render(row) + "\n")
-		case a.list.reports[i].Blocked():
-			b.WriteString(styleDim.Render(row) + "\n")
-		default:
-			b.WriteString(row + "\n")
-		}
-	}
-
 	// Key hints sit directly under the table so they never move; the focused
-	// device's findings render below them (spec §10.3).
+	// device's findings render below them (spec §10.3). Nothing here emits a
+	// trailing newline: the device list is the tallest screen, and a blank
+	// last line costs a device row on an 80x24 terminal.
 	b.WriteString("\n")
-	b.WriteString(styleHelp.Render(trunc("↑/↓ move · Enter select · i info · r refresh · ? keys · q quit", a.width)) + "\n\n")
+	b.WriteString(styleHelp.Render(trunc("↑/↓ move · Enter select · i info · r refresh · ? keys · q quit", a.width)))
 	if a.list.cursor >= 0 && a.list.cursor < len(a.devices) {
 		r := a.list.reports[a.list.cursor]
-		if len(r.Findings) > 0 {
-			// Findings are safety text, so wrap rather than clip: each on its
-			// own line, wrapped to the window (spec §10.3).
-			for _, f := range r.Findings {
-				b.WriteString(severityStyle(f.Severity).Render(wordWrap(f.Message, a.width)) + "\n")
-			}
-		} else {
-			b.WriteString(styleSuccess.Render("No safety findings.") + "\n")
+		if len(r.Findings) == 0 {
+			b.WriteString("\n" + styleSuccess.Render("No safety findings."))
+			return b.String()
+		}
+		// Findings are safety text, so wrap rather than clip: each on its own
+		// line, wrapped to the window (spec §10.3).
+		for _, f := range r.Findings {
+			b.WriteString("\n" + severityStyle(f.Severity).Render(wordWrap(f.Message, a.width)))
 		}
 	}
 	return b.String()
+}
+
+// deviceTable renders the device rows as a borderless table clamped to the
+// window width.
+func (a *App) deviceTable(rows [][]string) string {
+	const colPath, colSize, colModel = 0, 1, 6
+	return table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderTop(false).BorderBottom(false).BorderLeft(false).
+		BorderRight(false).BorderColumn(false).BorderHeader(false).
+		Wrap(false).
+		Width(a.width).
+		Headers("PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			s := lipgloss.NewStyle()
+			switch col {
+			case colPath:
+				s = s.PaddingLeft(2).PaddingRight(2)
+			case colSize:
+				s = s.Align(lipgloss.Right).PaddingRight(2)
+			case colModel:
+				// Last column: no trailing padding to waste.
+			default:
+				s = s.PaddingRight(2)
+			}
+			switch {
+			case row == table.HeaderRow && a.list.cursor == -1:
+				return s.Inherit(styleSelected)
+			case row == table.HeaderRow:
+				return s.Inherit(styleHeader)
+			case row == a.list.cursor:
+				return s.Inherit(styleSelected)
+			case a.list.reports[row].Blocked():
+				return s.Inherit(styleDim)
+			}
+			return s
+		}).
+		String()
 }
 
 // viewDeviceInfo renders the full-screen information overlay for the device
@@ -260,13 +257,12 @@ func (a *App) viewDeviceInfo() string {
 	return b.String()
 }
 
+// trunc clips s to n display cells, marking the cut with an ellipsis.
+// Cells, not runes: a CJK glyph occupies two columns, so a rune count would
+// let a row overrun the window it was measured against.
 func trunc(s string, n int) string {
-	r := []rune(s) // slice by runes, not bytes: never split a UTF-8 sequence
-	if len(r) <= n {
-		return s
+	if n <= 0 {
+		return ""
 	}
-	if n <= 1 {
-		return string(r[:n])
-	}
-	return string(r[:n-1]) + "…"
+	return ansi.Truncate(s, n, "…")
 }

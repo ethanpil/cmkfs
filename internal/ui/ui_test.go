@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ethanpil/cmkfs/internal/device"
 	"github.com/ethanpil/cmkfs/internal/executor"
@@ -675,11 +676,16 @@ func TestViewsFitWidth(t *testing.T) {
 	checkFit("confirm long finding + model")
 
 	// Device list: an over-long device-mapper path, a long model, and a long
-	// safety finding must all stay within the window.
+	// safety finding must all stay within the window. A second, ordinary
+	// device sits alongside it — column widths are shared across rows, so a
+	// single-device fixture cannot exercise that interaction.
 	wide := cleanDisk()
 	wide.Path = "/dev/mapper/" + strings.Repeat("x", 44)
 	wide.Model = strings.Repeat("M", 60)
-	a.devices = []device.Device{wide}
+	quiet := device.Device{Path: "/dev/sdz1", KName: "sdz1", MajMin: "8:241", Type: "part",
+		SizeBytes: 2 << 30, FSType: "vfat", Label: "boot", Mountpoints: []string{"/boot/efi"},
+		Model: "SanDisk Ultra"}
+	a.devices = []device.Device{wide, quiet}
 	a.list.refresh(a) // recomputes reports; overwrite the focused one below
 	a.list.reports[0] = safety.Report{Findings: []safety.Finding{
 		{Severity: safety.Warning, Code: "SIGNATURE_FS", Message: "Existing ext4 filesystem " + strings.Repeat("z", 90) + " will be destroyed."},
@@ -734,38 +740,86 @@ func TestDeviceListDynamicColumns(t *testing.T) {
 	disk.Model = "Samsung SSD 990 PRO 4TB"
 	part := device.Device{Path: "/dev/sde1", KName: "sde1", MajMin: "8:65", Type: "part",
 		SizeBytes: 4096 << 20, Parent: "/dev/sde", Model: disk.Model, Label: "data"}
+
+	// deviceRows returns the n table rows following the header, ANSI stripped
+	// so assertions hold under every color profile (the styles are no-ops
+	// under `go test` but not under CLICOLOR_FORCE=1, which main.go sets on
+	// vt* terminals). Rows are located by position because at a narrow width
+	// the path itself is truncated and cannot be matched on.
+	deviceRows := func(t *testing.T, view string, n int) []string {
+		t.Helper()
+		lines := strings.Split(view, "\n")
+		for i, l := range lines {
+			if strings.Contains(ansi.Strip(l), "PATH") {
+				if i+n >= len(lines) {
+					t.Fatalf("want %d rows after the header, view has %d lines:\n%s", n, len(lines), view)
+				}
+				rows := make([]string, n)
+				for j := range rows {
+					rows[j] = ansi.Strip(lines[i+1+j])
+				}
+				return rows
+			}
+		}
+		t.Fatalf("header not found in:\n%s", view)
+		return nil
+	}
+	fits := func(t *testing.T, view string, width int) {
+		t.Helper()
+		for _, l := range strings.Split(view, "\n") {
+			if w := lipgloss.Width(l); w > width {
+				t.Errorf("line is %d columns, window is %d:\n%q", w, width, l)
+			}
+		}
+	}
+
 	a := NewApp(testConfig(t, []device.Device{disk, part}, nil))
 	a.width, a.height = 80, 24
 
+	// Short paths: the whole model fits on 80 columns. The fixed layout this
+	// replaced pushed MODEL past column 84 and showed none of it.
 	view := a.View()
-	lines := strings.Split(view, "\n")
-	var header, row string
-	for i, l := range lines {
-		if strings.Contains(l, "PATH") {
-			header, row = l, lines[i+1]
-			break
-		}
-	}
-	if header == "" {
-		t.Fatalf("header not found:\n%s", view)
-	}
-	// With short paths the whole model fits on 80 columns — the old fixed
-	// layout pushed MODEL past column 84 and showed none of it.
 	if !strings.Contains(view, disk.Model) {
 		t.Fatalf("full model must be visible on 80 cols:\n%s", view)
 	}
-	// Columns align: the row's model starts where the MODEL header starts.
-	at := strings.Index(header, "MODEL")
-	if !strings.HasPrefix(row[at:], disk.Model) {
-		t.Fatalf("MODEL column misaligned:\nheader %q\nrow    %q", header, row)
+	fits(t, view, a.width)
+
+	// A pathological value on ONE row must not erase another row's data. A
+	// single long mountpoint used to take the whole budget, cutting MODEL
+	// off every row — including short ones with room to spare.
+	loud := device.Device{Path: "/dev/sdb1", KName: "sdb1", MajMin: "8:17", Type: "part",
+		SizeBytes: 1 << 40, FSType: "ext4", Model: "WDC WD40EFRX-68N32N0",
+		Mountpoints: []string{"/var/lib/kubelet/pods/9c1b2f3a-4d5e-6f70-8192-a3b4c5d6e7f8/volumes/kubernetes.io~csi/pvc-1a2b3c4d/mount"}}
+	a.devices = []device.Device{disk, loud}
+	a.list.refresh(a)
+	view = a.View()
+	fits(t, view, a.width)
+	rows := deviceRows(t, view, 2)
+	if !strings.Contains(rows[0], "Samsung") {
+		t.Errorf("a long mountpoint on another row must not cut this row's MODEL:\n%s", view)
 	}
-	for _, l := range lines {
-		if w := lipgloss.Width(l); w > a.width {
-			t.Errorf("line is %d columns, window is %d:\n%q", w, a.width, l)
+	if !strings.Contains(rows[1], "…") {
+		t.Errorf("the over-long mountpoint itself must be ellipsized:\n%q", rows[1])
+	}
+	// Every column must still be identifiable. Headers may be shortened when
+	// space is tight, but none may disappear — the fixed layout this replaced
+	// dropped whole columns, header included, off every row.
+	for _, h := range []string{"PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL"} {
+		if !strings.Contains(ansi.Strip(view), h[:3]) {
+			t.Errorf("column %s must survive a long row:\n%s", h, view)
 		}
 	}
 
-	// Narrow window: LABEL and MODEL are cut with an ellipsis. Below
+	// Wide glyphs are two columns each: a rune count would let this row
+	// overrun the window it was measured against.
+	cjk := part
+	cjk.Label = "数据备份盘归档卷"
+	cjk.Mountpoints = []string{"/mnt/数据"}
+	a.devices = []device.Device{disk, cjk}
+	a.list.refresh(a)
+	fits(t, a.View(), a.width)
+
+	// Narrow window: values are cut with an ellipsis implying more. Below
 	// minWidth App.View shows the too-small notice, so render the list
 	// directly to exercise the column fitting itself.
 	part.Label = "a-rather-long-volume-label"
@@ -773,13 +827,11 @@ func TestDeviceListDynamicColumns(t *testing.T) {
 	a.list.refresh(a)
 	a.width = 60
 	view = a.viewDeviceList()
-	if !strings.Contains(view, "…") {
-		t.Fatalf("narrow window must ellipsize LABEL/MODEL:\n%s", view)
-	}
-	for _, l := range strings.Split(view, "\n") {
-		if w := lipgloss.Width(l); w > a.width {
-			t.Errorf("line is %d columns, window is %d:\n%q", w, a.width, l)
-		}
+	fits(t, view, a.width)
+	// Assert on the row itself: the key-hint line carries an ellipsis of its
+	// own at this width, so scanning the whole view would prove nothing.
+	if r := deviceRows(t, view, 2)[1]; !strings.Contains(r, "…") {
+		t.Errorf("narrow window must ellipsize the row's values:\n%q", r)
 	}
 }
 
@@ -826,9 +878,16 @@ func TestDeviceInfoScreen(t *testing.T) {
 	if a.list.infoOpen || a.screen != ScreenDeviceList {
 		t.Fatal("overlay must close back to the device list")
 	}
-	press(a, "i", "esc")
-	if a.list.infoOpen {
-		t.Fatal("Esc must close the overlay")
+	// Each documented close key, exercised as a close rather than an open.
+	for _, k := range []string{"esc", "i", "q"} {
+		press(a, "i")
+		if !a.list.infoOpen {
+			t.Fatalf("i must reopen the overlay before testing %q", k)
+		}
+		press(a, k)
+		if a.list.infoOpen {
+			t.Fatalf("%q must close the overlay", k)
+		}
 	}
 }
 

@@ -385,7 +385,10 @@ func (a *App) viewHelpOverlay() string {
 	}
 	out := styleTitle.Render(title+" — keys") + "\n\n"
 	for _, r := range rows {
-		out += fmt.Sprintf("  %-14s %s\n", styleHeader.Render(r[0]), r[1])
+		// Pad before styling: %-14s counts the escape sequence's runes, so
+		// padding a rendered string aligns nothing on a color terminal.
+		out += "  " + styleHeader.Render(fmt.Sprintf("%-14s", r[0])) + " " +
+			trunc(r[1], max(a.width-17, 1)) + "\n"
 	}
 	return out + "\n" + styleHelp.Render("Press ? or Esc to close.")
 }

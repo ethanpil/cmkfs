@@ -733,6 +733,37 @@ func TestHelpOverlayShowsVersion(t *testing.T) {
 	}
 }
 
+// TestHelpOverlayLayout: descriptions line up in one column and no row
+// overruns the window. Padding a styled string counts the ANSI escape's
+// runes, which lines nothing up on a color terminal — and is invisible to a
+// test unless the styles are actually emitting color.
+func TestHelpOverlayLayout(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
+	a.Update(tea.WindowSizeMsg{Width: minWidth, Height: minHeight})
+	press(a, "?")
+
+	// Rows are "  " + key padded to 14 + " " + description, so every
+	// description begins at column 17 regardless of how long its key is.
+	const descCol = 17
+	rows := 0
+	for _, l := range strings.Split(a.View(), "\n") {
+		plain := ansi.Strip(l)
+		if !strings.HasPrefix(plain, "  ") || len(plain) <= descCol {
+			continue // title, blank lines, and the footer are not key rows
+		}
+		rows++
+		if plain[descCol] == ' ' || plain[descCol-1] != ' ' {
+			t.Errorf("description must start at column %d:\n%q", descCol, plain)
+		}
+		if w := lipgloss.Width(l); w > minWidth {
+			t.Errorf("help row is %d columns, window is %d:\n%q", w, minWidth, l)
+		}
+	}
+	if rows < 8 {
+		t.Fatalf("expected the full key table, found %d rows", rows)
+	}
+}
+
 // TestDeviceListDynamicColumns: columns take only the width their content
 // needs (short paths leave room for MODEL); when the window is too narrow,
 // LABEL and MODEL are cut with an ellipsis and every line still fits.

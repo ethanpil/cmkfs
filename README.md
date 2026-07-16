@@ -104,6 +104,7 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 | q, F10 | Quit (confirmation prompt once past the filesystem pick) |
 | ? | Help overlay |
 | r | Refresh device list (Screen 1) |
+| i | Full information for the highlighted device (Screen 1) |
 | h | Extended help for the focused option (Screen 3) |
 | a | Advanced — Extra Arguments (Screen 3) |
 | p | Print the command and exit instead of executing (Screen 4) |

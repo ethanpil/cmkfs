@@ -28,6 +28,11 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go test ./...
+      # Without a TTY lipgloss renders monochrome and every style is a no-op,
+      # so a layout bug that only exists once escape sequences are in the
+      # string passes unnoticed. Run the UI suite once with color forced —
+      # the same thing main.go does on vt* consoles.
+      - run: CLICOLOR_FORCE=1 go test ./internal/ui/
 
   fuzz-smoke:
     runs-on: ubuntu-latest

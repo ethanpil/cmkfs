@@ -83,7 +83,7 @@ func (a *App) viewDeviceList() string {
 	// The fixed columns plus an unbounded PATH/MODEL can exceed a narrow
 	// window, so every row and the header are clamped to the window width
 	// (the MODEL column is the first to be cut). trunc adds an ellipsis.
-	header := trunc(fmt.Sprintf("  %-24s %8s  %-5s %-10s %-12s %-16s %s",
+	header := trunc(fmt.Sprintf("  %-16s %8s  %-5s %-10s %-12s %-12s %s",
 		"PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL"), a.width)
 	if a.list.cursor == -1 {
 		b.WriteString(styleSelected.Render(header) + "\n")
@@ -104,9 +104,9 @@ func (a *App) viewDeviceList() string {
 				mount += fmt.Sprintf(" (+%d)", len(d.Mountpoints)-1)
 			}
 		}
-		row := fmt.Sprintf("  %-24s %8s  %-5s %-10s %-12s %-16s %s",
+		row := fmt.Sprintf("  %-16s %8s  %-5s %-10s %-12s %-12s %s",
 			indent+d.Path, device.HumanSizeCompact(d.SizeBytes), d.Type,
-			trunc(d.FSType, 10), trunc(d.Label, 12), trunc(mount, 16), d.Model)
+			trunc(d.FSType, 10), trunc(d.Label, 12), trunc(mount, 12), d.Model)
 		row = trunc(row, a.width)
 		switch {
 		case i == a.list.cursor:

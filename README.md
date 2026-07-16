@@ -4,7 +4,7 @@ A terminal UI front-end for the `mkfs.*` family of filesystem creation
 tools, in the same spirit that `cfdisk` is a TUI front-end for disk
 partitioning.
 
-![cmkfs walkthrough: device list → filesystem picker → options → confirm → result](docs/demo.gif)
+![cmkfs walkthrough: device list with safety findings → device information → filesystem picker → options → confirm → live mkfs output](docs/demo.gif)
 
 cmkfs guides you through selecting a block device, choosing a filesystem
 (ext4, XFS, Btrfs, FAT32/vfat, exFAT, or F2FS), configuring a curated set
@@ -150,8 +150,9 @@ go test ./...                                   # unit tests, no root needed
 sudo go test -tags integration ./integration/   # loop-device tests, root + Linux
 ```
 
-Regenerate the demo GIF at the top of this README (renders the real UI
-against sample devices, no root or real disks needed):
+The demo GIF at the top of this README is stitched from the real screen
+captures in `docs/screenshots`, numbered in flow order. Add or replace a
+shot there and rebuild it with:
 
 ```
 go run ./internal/gendemo docs/demo.gif

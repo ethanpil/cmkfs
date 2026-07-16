@@ -1,119 +1,93 @@
-// Command gendemo drives the real cmkfs UI (internal/ui) against in-memory
-// sample devices and rasterizes each screen into the animated GIF shown at
-// the top of the README. It runs headlessly — no PTY, root, or real disks —
-// by calling the model's Update/View directly, so the frames are the genuine
-// UI output, only the device data is synthetic.
+// Command gendemo stitches the terminal screenshots in docs/screenshots into
+// the animated GIF shown at the top of the README. The shots are real
+// captures of the real binary driving real disks on the test VM, numbered in
+// flow order, so the demo shows what the tool actually does rather than a
+// reconstruction of it.
 //
-// Usage: go run ./internal/gendemo [out.gif]
+// Usage: go run ./internal/gendemo [out.gif] [screenshot-dir]
 package main
 
 import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/gif"
-	"image/png"
+	"image/jpeg"
 	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
-
-	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/ethanpil/cmkfs/internal/demodata"
-	"github.com/ethanpil/cmkfs/internal/ui"
 )
 
-func main() {
-	// Force color output even without a TTY, so lipgloss emits the ANSI the
-	// renderer colorizes. Harmless if the environment ignores it (the frame
-	// then renders monochrome).
-	_ = os.Setenv("CLICOLOR_FORCE", "1")
-	_ = os.Setenv("COLORTERM", "truecolor")
-	_ = os.Setenv("TERM", "xterm-256color")
+// Hold each frame long enough to read it, in centiseconds, keyed by
+// screenshot number; busier screens get longer. Unlisted frames use
+// defaultHold, so adding a shot needs no edit here.
+var holds = map[int]int{
+	2:  300, // every blocker on the system disk at once
+	6:  240, // the first selectable device
+	7:  320, // the filesystem descriptions
+	8:  260, // the options form and its help pane
+	12: 300, // real mkfs output
+	13: 240, // back at the list, now ext4
+	14: 360, // device information, and the loop's pause before it restarts
+}
 
+const defaultHold = 180
+
+// A terminal renders a fixed handful of colors; the rest of what a JPEG
+// carries is compression noise. Keeping the palette small forces those back
+// onto the real colors and costs the encoder fewer bits per pixel.
+const maxColors = 32
+
+func main() {
 	out := "docs/demo.gif"
 	if len(os.Args) > 1 {
 		out = os.Args[1]
 	}
-
-	app := ui.NewApp(demodata.Config())
-	app.Update(tea.WindowSizeMsg{Width: 108, Height: 26})
-
-	type shot struct {
-		text  string
-		delay int // GIF delay in centiseconds
-	}
-	var shots []shot
-	snap := func(delay int) { shots = append(shots, shot{app.View(), delay}) }
-
-	// 1. Device list — move the cursor onto /dev/sda1 (the ext4 signature).
-	press(app, key("down"), key("down"))
-	snap(220)
-
-	// 2. Filesystem picker — ext4 highlighted.
-	press(app, key("enter"))
-	snap(200)
-
-	// 3. Options form — type a label so the live help pane is visible.
-	press(app, key("enter"))
-	typeString(app, "backups")
-	snap(240)
-
-	// 4. Confirm — the exact command (with the injected -F), the signature
-	//    warning, and the typed-confirmation prompt.
-	press(app, key("tab"), key("enter"))
-	snap(120)
-	typeString(app, "sda1")
-	snap(260)
-
-	// 5. Execute + result — accept, then pump the fake executor to completion.
-	_, cmd := app.Update(key("enter"))
-	execView, resultView := pump(app, cmd)
-	if execView != "" {
-		shots = append(shots, shot{execView, 240})
-	}
-	if resultView != "" {
-		shots = append(shots, shot{resultView, 320})
+	src := "docs/screenshots"
+	if len(os.Args) > 2 {
+		src = os.Args[2]
 	}
 
-	// Rasterize. Every frame is padded to the same size (a GIF requirement).
-	cols, rows := 0, 0
-	grids := make([][][]cell, len(shots))
-	for i, s := range shots {
-		g := trimTrailingBlank(parseFrame(s.text))
-		grids[i] = g
-		if len(g) > rows {
-			rows = len(g)
+	paths, err := shotPaths(src)
+	if err != nil {
+		fatal(err)
+	}
+	if len(paths) == 0 {
+		fatal(fmt.Errorf("no numbered .jpg screenshots in %s", src))
+	}
+
+	imgs := make([]image.Image, len(paths))
+	delays := make([]int, len(paths))
+	for i, p := range paths {
+		if imgs[i], err = decode(p); err != nil {
+			fatal(fmt.Errorf("%s: %w", p, err))
 		}
-		for _, line := range g {
-			if len(line) > cols {
-				cols = len(line)
-			}
-		}
-	}
-	if cols > maxCols {
-		cols = maxCols
-	}
-	if rows > maxRows {
-		rows = maxRows
-	}
-
-	frames := make([]*image.Paletted, len(shots))
-	delays := make([]int, len(shots))
-	pal := buildPalette(grids, cols, rows)
-	for i := range shots {
-		frames[i] = toPaletted(renderFrame(grids[i], cols, rows), pal)
-		delays[i] = shots[i].delay
-	}
-
-	if dir := os.Getenv("CMKFS_DEMO_PNG"); dir != "" {
-		for i := range frames {
-			f, _ := os.Create(fmt.Sprintf("%s/frame%d.png", dir, i))
-			_ = png.Encode(f, frames[i])
-			_ = f.Close()
+		n, _ := shotNumber(p)
+		if d, ok := holds[n]; ok {
+			delays[i] = d
+		} else {
+			delays[i] = defaultHold
 		}
 	}
 
-	if err := os.MkdirAll(dirOf(out), 0o755); err != nil {
+	// GIF requires one size; the shots should already agree, but pad rather
+	// than crop if a later capture is off by a few pixels.
+	size := image.Rectangle{}
+	for _, im := range imgs {
+		size = size.Union(im.Bounds().Sub(im.Bounds().Min))
+	}
+
+	pal := buildPalette(imgs)
+	frames := make([]*image.Paletted, len(imgs))
+	for i, im := range imgs {
+		frames[i] = toPaletted(im, size, pal)
+	}
+	frames = diff(frames)
+
+	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		fatal(err)
 	}
 	f, err := os.Create(out)
@@ -121,122 +95,190 @@ func main() {
 		fatal(err)
 	}
 	defer f.Close()
-	if err := gif.EncodeAll(f, &gif.GIF{Image: frames, Delay: delays, LoopCount: 0}); err != nil {
+	disposals := make([]byte, len(frames))
+	for i := range disposals {
+		disposals[i] = gif.DisposalNone // each frame paints over the last
+	}
+	g := &gif.GIF{
+		Image:     frames,
+		Delay:     delays,
+		Disposal:  disposals,
+		LoopCount: 0,
+		Config:    image.Config{ColorModel: pal, Width: size.Dx(), Height: size.Dy()},
+	}
+	if err := gif.EncodeAll(f, g); err != nil {
 		fatal(err)
 	}
-	fmt.Printf("wrote %s: %d frames, %dx%d\n", out, len(frames), cols*cellW+2*padding, rows*cellH+2*padding)
+	fi, _ := f.Stat()
+	fmt.Printf("%s: %d frames, %dx%d, %d colors, %.0f KiB\n",
+		out, len(frames), size.Dx(), size.Dy(), len(pal), float64(fi.Size())/1024)
 }
 
-func key(s string) tea.KeyMsg {
-	switch s {
-	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
-	case "tab":
-		return tea.KeyMsg{Type: tea.KeyTab}
-	case "down":
-		return tea.KeyMsg{Type: tea.KeyDown}
-	case "right":
-		return tea.KeyMsg{Type: tea.KeyRight}
+// shotPaths returns the numbered screenshots in numeric order — 10.jpg sorts
+// after 9.jpg, which a lexical sort gets wrong.
+func shotPaths(dir string) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "*.jpg"))
+	if err != nil {
+		return nil, err
 	}
-	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
-}
-
-func press(app *ui.App, keys ...tea.KeyMsg) {
-	for _, k := range keys {
-		app.Update(k)
-	}
-}
-
-func typeString(app *ui.App, s string) {
-	for _, r := range s {
-		app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-	}
-}
-
-// pump runs the executor's async commands to completion, capturing the last
-// execute-screen view (most output) and the result view. tick commands are
-// dropped so no wall-clock time is spent animating the spinner.
-func pump(app *ui.App, cmd tea.Cmd) (execView, resultView string) {
-	for steps := 0; cmd != nil && steps < 80; steps++ {
-		msg := cmd()
-		if msg == nil {
-			break
-		}
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			cmd = nil
-			for _, c := range batch {
-				if c != nil {
-					cmd = c // the first real command is waitEv; drop tick
-					break
-				}
-			}
-			continue
-		}
-		_, cmd = app.Update(msg)
-		v := app.View()
-		switch {
-		case strings.Contains(v, "cmkfs — executing"):
-			execView = v
-		case strings.Contains(v, "Format complete"):
-			resultView = v
+	var out []string
+	for _, m := range matches {
+		if _, ok := shotNumber(m); ok {
+			out = append(out, m)
 		}
 	}
-	return execView, resultView
+	sort.Slice(out, func(i, j int) bool {
+		a, _ := shotNumber(out[i])
+		b, _ := shotNumber(out[j])
+		return a < b
+	})
+	return out, nil
 }
 
-// buildPalette collects every color used across all frames (plus defaults)
-// into a GIF palette, capped at 256 entries.
-func buildPalette(grids [][][]cell, cols, rows int) color.Palette {
-	seen := map[color.RGBA]bool{defaultBG: true, defaultFG: true}
-	pal := color.Palette{defaultBG, defaultFG}
-	add := func(c color.RGBA) {
-		if !seen[c] && len(pal) < 256 {
-			seen[c] = true
-			pal = append(pal, c)
-		}
+func shotNumber(path string) (int, bool) {
+	base := filepath.Base(path)
+	n, err := strconv.Atoi(strings.TrimSuffix(base, filepath.Ext(base)))
+	return n, err == nil
+}
+
+func decode(path string) (image.Image, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
 	}
-	for _, g := range grids {
-		for ry := 0; ry < rows && ry < len(g); ry++ {
-			for cx := 0; cx < cols && cx < len(g[ry]); cx++ {
-				add(g[ry][cx].fg)
-				add(g[ry][cx].bg)
+	defer f.Close()
+	return jpeg.Decode(f)
+}
+
+// JPEG smears every flat terminal color across a cloud of near-identical
+// neighbours. Bucketing collapses that cloud back to one entry so the palette
+// spends its slots on real colors instead of compression noise — and mapping
+// through it denoises the frame as a side effect, which is what lets diff()
+// see two captures of an unchanged region as unchanged.
+const bucket = 16
+
+func quantize(c color.RGBA) color.RGBA {
+	q := func(v uint8) uint8 {
+		n := (int(v) + bucket/2) / bucket * bucket
+		if n > 255 {
+			n = 255
+		}
+		return uint8(n)
+	}
+	return color.RGBA{q(c.R), q(c.G), q(c.B), 255}
+}
+
+func rgba(c color.Color) color.RGBA {
+	r, g, b, _ := c.RGBA()
+	return color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 255}
+}
+
+// buildPalette takes the most common bucketed colors across every frame. A
+// terminal screenshot only holds a handful of real colors, so the common ones
+// are exactly those and the long tail is noise.
+func buildPalette(imgs []image.Image) color.Palette {
+	counts := map[color.RGBA]int{}
+	for _, im := range imgs {
+		b := im.Bounds()
+		for y := b.Min.Y; y < b.Max.Y; y++ {
+			for x := b.Min.X; x < b.Max.X; x++ {
+				counts[quantize(rgba(im.At(x, y)))]++
 			}
 		}
 	}
+	type entry struct {
+		c color.RGBA
+		n int
+	}
+	entries := make([]entry, 0, len(counts))
+	for c, n := range counts {
+		entries = append(entries, entry{c, n})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].n != entries[j].n {
+			return entries[i].n > entries[j].n
+		}
+		// Ties must break deterministically or the GIF churns between runs.
+		a, b := entries[i].c, entries[j].c
+		return uint32(a.R)<<16|uint32(a.G)<<8|uint32(a.B) < uint32(b.R)<<16|uint32(b.G)<<8|uint32(b.B)
+	})
+	// The last slot is reserved for transparency, which diff() paints
+	// unchanged pixels with.
+	if len(entries) > maxColors-1 {
+		entries = entries[:maxColors-1]
+	}
+	pal := make(color.Palette, len(entries)+1)
+	for i, e := range entries {
+		pal[i] = e.c
+	}
+	pal[len(entries)] = color.RGBA{}
 	return pal
 }
 
-func toPaletted(img *image.RGBA, pal color.Palette) *image.Paletted {
-	p := image.NewPaletted(img.Bounds(), pal)
-	b := img.Bounds()
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			p.Set(x, y, img.At(x, y))
+func toPaletted(im image.Image, size image.Rectangle, pal color.Palette) *image.Paletted {
+	// Pad onto black so a short frame does not inherit the previous one.
+	canvas := image.NewRGBA(size)
+	draw.Draw(canvas, size, image.NewUniform(color.Black), image.Point{}, draw.Src)
+	draw.Draw(canvas, im.Bounds().Sub(im.Bounds().Min), im, im.Bounds().Min, draw.Src)
+
+	// Nearest-match is O(len(pal)) per pixel; cache on the bucketed color, of
+	// which there are few, so the search runs once per distinct color. Search
+	// only the opaque entries — the last slot is diff()'s transparent one and
+	// is never a legitimate match for a visible pixel.
+	opaque := pal[:len(pal)-1]
+	idx := map[color.RGBA]uint8{}
+	out := image.NewPaletted(size, pal)
+	for y := size.Min.Y; y < size.Max.Y; y++ {
+		for x := size.Min.X; x < size.Max.X; x++ {
+			q := quantize(rgba(canvas.At(x, y)))
+			i, ok := idx[q]
+			if !ok {
+				i = uint8(opaque.Index(q))
+				idx[q] = i
+			}
+			out.SetColorIndex(x, y, i)
 		}
 	}
-	return p
+	return out
 }
 
-// trimTrailingBlank drops trailing rows that contain no visible glyph, so a
-// short screen isn't padded to the height of the tallest one.
-func trimTrailingBlank(g [][]cell) [][]cell {
-	last := -1
-	for i, row := range g {
-		for _, c := range row {
-			if c.ch > 0x20 && c.ch <= 0x7e {
-				last = i
-				break
+// diff rewrites every frame after the first to carry only what changed:
+// pixels equal to the previous frame become transparent, and the frame is
+// cropped to the region that moved. Consecutive screens differ by a
+// highlighted row and a line of footer text, so most of each frame becomes a
+// run of one index — which is what LZW is good at.
+func diff(frames []*image.Paletted) []*image.Paletted {
+	if len(frames) < 2 {
+		return frames
+	}
+	clear := uint8(len(frames[0].Palette) - 1) // the transparent slot
+	out := []*image.Paletted{frames[0]}
+	for i := 1; i < len(frames); i++ {
+		prev, cur := frames[i-1], frames[i]
+		box := image.Rectangle{Min: cur.Bounds().Max, Max: cur.Bounds().Min}
+		for y := cur.Bounds().Min.Y; y < cur.Bounds().Max.Y; y++ {
+			for x := cur.Bounds().Min.X; x < cur.Bounds().Max.X; x++ {
+				if cur.ColorIndexAt(x, y) != prev.ColorIndexAt(x, y) {
+					box = box.Union(image.Rect(x, y, x+1, y+1))
+				}
 			}
 		}
+		if box.Empty() { // identical frame: keep a 1x1 stub so the delay holds
+			box = image.Rect(0, 0, 1, 1)
+		}
+		f := image.NewPaletted(box, cur.Palette)
+		for y := box.Min.Y; y < box.Max.Y; y++ {
+			for x := box.Min.X; x < box.Max.X; x++ {
+				if c := cur.ColorIndexAt(x, y); c != prev.ColorIndexAt(x, y) {
+					f.SetColorIndex(x, y, c)
+				} else {
+					f.SetColorIndex(x, y, clear)
+				}
+			}
+		}
+		out = append(out, f)
 	}
-	return g[:last+1]
-}
-
-func dirOf(path string) string {
-	if i := strings.LastIndexAny(path, `/\`); i >= 0 {
-		return path[:i]
-	}
-	return "."
+	return out
 }
 
 func fatal(err error) {

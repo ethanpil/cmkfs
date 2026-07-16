@@ -118,8 +118,10 @@ func (a *App) viewDeviceList() string {
 		}
 	}
 
+	// Key hints sit directly under the table so they never move; the focused
+	// device's findings render below them (spec §10.3).
 	b.WriteString("\n")
-	// Footer: focused device's findings in one line (spec §10.3).
+	b.WriteString(styleHelp.Render("↑/↓ move · Enter select · r refresh · ? keys · q quit") + "\n\n")
 	if a.list.cursor >= 0 && a.list.cursor < len(a.devices) {
 		r := a.list.reports[a.list.cursor]
 		if len(r.Findings) > 0 {
@@ -132,7 +134,6 @@ func (a *App) viewDeviceList() string {
 			b.WriteString(styleSuccess.Render("No safety findings.") + "\n")
 		}
 	}
-	b.WriteString(styleHelp.Render("↑/↓ move · Enter select · r refresh · ? keys · q quit"))
 	return b.String()
 }
 

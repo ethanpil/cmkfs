@@ -689,6 +689,31 @@ func TestViewsFitWidth(t *testing.T) {
 	checkFit("device list long row + finding")
 }
 
+// TestDeviceListFooterOrder: the key-hint line sits directly under the table
+// and stays put; the focused device's findings render below it.
+func TestDeviceListFooterOrder(t *testing.T) {
+	a := NewApp(testConfig(t, []device.Device{signedPart()}, nil))
+	press(a, "down") // focus the device: SIGNATURE_FS finding appears
+	view := a.View()
+	hints := strings.Index(view, "↑/↓ move")
+	finding := strings.Index(view, "Existing xfs filesystem")
+	if hints == -1 || finding == -1 {
+		t.Fatalf("hints or finding missing from view:\n%s", view)
+	}
+	if hints > finding {
+		t.Fatal("key hints must render above the findings")
+	}
+	// The hint line must not move when the focus changes (header row has no
+	// findings block at all).
+	row := strings.Count(view[:hints], "\n")
+	press(a, "up")
+	view = a.View()
+	hints = strings.Index(view, "↑/↓ move")
+	if hints == -1 || strings.Count(view[:hints], "\n") != row {
+		t.Fatalf("hint line moved between focus states:\n%s", view)
+	}
+}
+
 func TestBoolToggleEmission(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	press(a, "down", "enter", "enter")

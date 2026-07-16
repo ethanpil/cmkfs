@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -22,10 +23,28 @@ type listState struct {
 	depths  []int
 
 	// Device-information overlay (key i): the device is captured at open
-	// time so a refresh underneath cannot desync it.
-	infoOpen bool
-	infoDev  device.Device
-	details  device.Details
+	// time so a refresh underneath cannot desync it. details arrives later,
+	// on a detailsMsg — gathering it touches the drive (see
+	// device.CollectDetails), which must not block the event loop.
+	infoOpen    bool
+	infoDev     device.Device
+	details     device.Details
+	detailsWait bool
+	infoVP      viewport.Model
+}
+
+// detailsMsg carries the info-screen extras back from the background read.
+// Path identifies the device asked about: a reply for a device the user has
+// since moved off is stale and must be dropped.
+type detailsMsg struct {
+	path    string
+	details device.Details
+}
+
+func (l *listState) resizeInfo(width, height int) {
+	l.infoVP.Width = width
+	// Title, its blank line, the blank line above the footer, and the footer.
+	l.infoVP.Height = max(height-4, 1)
 }
 
 func (l *listState) refresh(a *App) {
@@ -67,9 +86,19 @@ func (a *App) updateDeviceList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.refreshDevices()
 	case "i":
 		if a.list.cursor >= 0 && a.list.cursor < len(a.devices) {
-			a.list.infoDev = a.devices[a.list.cursor]
-			a.list.details = a.cfg.Details(a.list.infoDev)
+			d := a.devices[a.list.cursor]
+			a.list.infoDev = d
+			a.list.details = device.Details{}
+			a.list.detailsWait = true
 			a.list.infoOpen = true
+			a.list.resizeInfo(a.width, a.height)
+			a.list.infoVP.SetYOffset(0)
+			// Off the event loop: statfs can hang on a wedged mount and the
+			// temperature read wakes a sleeping drive. The screen opens now
+			// and fills in when the answer arrives.
+			return a, func() tea.Msg {
+				return detailsMsg{path: d.Path, details: a.cfg.Details(d)}
+			}
 		}
 	case "enter":
 		if a.list.cursor < 0 || a.list.cursor >= len(a.devices) {
@@ -188,7 +217,6 @@ func (a *App) viewDeviceInfo() string {
 	d := a.list.infoDev
 	det := a.list.details
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("cmkfs — device information") + "\n\n")
 
 	dash := func(s string) string {
 		if s == "" {
@@ -256,9 +284,20 @@ func (a *App) viewDeviceInfo() string {
 	if det.HasTemp {
 		row("Temperature", fmt.Sprintf("%.1f °C", det.TempCelsius))
 	}
+	if a.list.detailsWait {
+		row("", styleDim.Render("reading usage, block size and temperature…"))
+	}
 
-	b.WriteString("\n" + styleHelp.Render("Press i or Esc to close."))
-	return b.String()
+	// The field list outgrows a 24-row terminal on its own (a btrfs root with
+	// subvolumes mounts four times), so it scrolls rather than pushing the
+	// title — and the device's own path — off the top.
+	a.list.infoVP.SetContent(strings.TrimSuffix(b.String(), "\n"))
+	hint := "Press i or Esc to close."
+	if a.list.infoVP.TotalLineCount() > a.list.infoVP.Height {
+		hint = "↑/↓ scroll · " + hint
+	}
+	return styleTitle.Render("cmkfs — device information") + "\n\n" +
+		a.list.infoVP.View() + "\n" + styleHelp.Render(trunc(hint, a.width))
 }
 
 // trunc clips s to n display cells, marking the cut with an ellipsis.

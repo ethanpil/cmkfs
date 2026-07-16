@@ -196,6 +196,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Propagate to layout-owning sub-models (spec §10.4); the executor
 		// keeps running untouched regardless of size.
 		a.exec.resize(a.width, a.height)
+		a.list.resizeInfo(a.width, a.height)
+		return a, nil
+
+	case detailsMsg:
+		// A reply for a device the user has since moved off is stale.
+		if a.list.infoOpen && msg.path == a.list.infoDev.Path {
+			a.list.details = msg.details
+			a.list.detailsWait = false
+		}
 		return a, nil
 
 	case tickMsg:
@@ -253,8 +262,12 @@ func (a *App) updateKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if a.screen == ScreenDeviceList && a.list.infoOpen {
 		if key == "i" || key == "esc" || key == "q" {
 			a.list.infoOpen = false
+			return a, nil
 		}
-		return a, nil
+		// Anything else goes to the viewport, which owns the scroll keys.
+		var cmd tea.Cmd
+		a.list.infoVP, cmd = a.list.infoVP.Update(msg)
+		return a, cmd
 	}
 
 	// Long-help overlay on the options form.

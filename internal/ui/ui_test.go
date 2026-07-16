@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -853,14 +854,32 @@ func TestDeviceInfoScreen(t *testing.T) {
 		}
 	}
 	a := NewApp(cfg)
+	a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	press(a, "i") // header row focused: no device, no overlay
 	if a.list.infoOpen {
 		t.Fatal("i on the header row must not open the overlay")
 	}
-	press(a, "down", "i")
+	cmd := press(a, "down", "i")
 	if !a.list.infoOpen {
 		t.Fatal("i on a device must open the overlay")
+	}
+	// The overlay opens before the details are read — gathering them touches
+	// the drive, so it must not block the event loop.
+	if cmd == nil {
+		t.Fatal("i must return a command to read the details off the loop")
+	}
+	if !a.list.detailsWait {
+		t.Fatal("the overlay must show a pending state until the details land")
+	}
+	// Fields known from enumeration are readable immediately.
+	if !strings.Contains(a.View(), "/dev/sdf1") {
+		t.Errorf("device path must render before the details arrive:\n%s", a.View())
+	}
+
+	a.Update(cmd()) // deliver the detailsMsg
+	if a.list.detailsWait {
+		t.Fatal("detailsMsg must clear the pending state")
 	}
 	view := a.View()
 	for _, want := range []string{
@@ -887,6 +906,47 @@ func TestDeviceInfoScreen(t *testing.T) {
 		press(a, k)
 		if a.list.infoOpen {
 			t.Fatalf("%q must close the overlay", k)
+		}
+	}
+}
+
+// TestDeviceInfoFitsHeight: the field list outgrows an 80x24 terminal on its
+// own — a btrfs root with subvolumes mounts several times — so it must scroll
+// rather than push the title, and the device's own path, off the top.
+func TestDeviceInfoFitsHeight(t *testing.T) {
+	for _, mounts := range []int{0, 1, 2, 4, 10} {
+		dev := signedPart()
+		dev.Serial = "S6PENL0T123456"
+		for i := 0; i < mounts; i++ {
+			dev.Mountpoints = append(dev.Mountpoints, fmt.Sprintf("/mnt/subvol%d", i))
+		}
+		cfg := testConfig(t, []device.Device{dev}, nil)
+		cfg.Details = func(d device.Device) device.Details {
+			return device.Details{LogicalBlockSize: 512, PhysicalBlockSize: 4096, TempCelsius: 43.5, HasTemp: true}
+		}
+		a := NewApp(cfg)
+		a.Update(tea.WindowSizeMsg{Width: minWidth, Height: minHeight})
+		cmd := press(a, "down", "i")
+		a.Update(cmd())
+
+		view := a.View()
+		lines := strings.Split(view, "\n")
+		if len(lines) > minHeight {
+			t.Errorf("%d mountpoints: info screen is %d lines, terminal is %d:\n%s",
+				mounts, len(lines), minHeight, view)
+		}
+		// The title and the path identify what is about to be destroyed;
+		// bubbletea keeps the LAST n lines, so an overflow drops them first.
+		if !strings.Contains(lines[0], "device information") {
+			t.Errorf("%d mountpoints: title must stay visible:\n%s", mounts, view)
+		}
+		if !strings.Contains(view, dev.Path) {
+			t.Errorf("%d mountpoints: device path must stay visible:\n%s", mounts, view)
+		}
+		for _, l := range lines {
+			if w := lipgloss.Width(l); w > minWidth {
+				t.Errorf("%d mountpoints: line is %d columns, window is %d:\n%q", mounts, w, minWidth, l)
+			}
 		}
 	}
 }

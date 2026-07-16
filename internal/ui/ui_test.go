@@ -726,6 +726,63 @@ func TestHelpOverlayShowsVersion(t *testing.T) {
 	}
 }
 
+// TestDeviceListDynamicColumns: columns take only the width their content
+// needs (short paths leave room for MODEL); when the window is too narrow,
+// LABEL and MODEL are cut with an ellipsis and every line still fits.
+func TestDeviceListDynamicColumns(t *testing.T) {
+	disk := cleanDisk()
+	disk.Model = "Samsung SSD 990 PRO 4TB"
+	part := device.Device{Path: "/dev/sde1", KName: "sde1", MajMin: "8:65", Type: "part",
+		SizeBytes: 4096 << 20, Parent: "/dev/sde", Model: disk.Model, Label: "data"}
+	a := NewApp(testConfig(t, []device.Device{disk, part}, nil))
+	a.width, a.height = 80, 24
+
+	view := a.View()
+	lines := strings.Split(view, "\n")
+	var header, row string
+	for i, l := range lines {
+		if strings.Contains(l, "PATH") {
+			header, row = l, lines[i+1]
+			break
+		}
+	}
+	if header == "" {
+		t.Fatalf("header not found:\n%s", view)
+	}
+	// With short paths the whole model fits on 80 columns — the old fixed
+	// layout pushed MODEL past column 84 and showed none of it.
+	if !strings.Contains(view, disk.Model) {
+		t.Fatalf("full model must be visible on 80 cols:\n%s", view)
+	}
+	// Columns align: the row's model starts where the MODEL header starts.
+	at := strings.Index(header, "MODEL")
+	if !strings.HasPrefix(row[at:], disk.Model) {
+		t.Fatalf("MODEL column misaligned:\nheader %q\nrow    %q", header, row)
+	}
+	for _, l := range lines {
+		if w := lipgloss.Width(l); w > a.width {
+			t.Errorf("line is %d columns, window is %d:\n%q", w, a.width, l)
+		}
+	}
+
+	// Narrow window: LABEL and MODEL are cut with an ellipsis. Below
+	// minWidth App.View shows the too-small notice, so render the list
+	// directly to exercise the column fitting itself.
+	part.Label = "a-rather-long-volume-label"
+	a.devices = []device.Device{disk, part}
+	a.list.refresh(a)
+	a.width = 60
+	view = a.viewDeviceList()
+	if !strings.Contains(view, "…") {
+		t.Fatalf("narrow window must ellipsize LABEL/MODEL:\n%s", view)
+	}
+	for _, l := range strings.Split(view, "\n") {
+		if w := lipgloss.Width(l); w > a.width {
+			t.Errorf("line is %d columns, window is %d:\n%q", w, a.width, l)
+		}
+	}
+}
+
 func TestBoolToggleEmission(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	press(a, "down", "enter", "enter")

@@ -80,11 +80,57 @@ func (a *App) viewDeviceList() string {
 		return b.String()
 	}
 
-	// The fixed columns plus an unbounded PATH/MODEL can exceed a narrow
-	// window, so every row and the header are clamped to the window width
-	// (the MODEL column is the first to be cut). trunc adds an ellipsis.
-	header := trunc(fmt.Sprintf("  %-16s %8s  %-5s %-10s %-12s %-12s %s",
-		"PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL"), a.width)
+	// Every column takes exactly the width its content needs, so short paths
+	// leave more room for MODEL. When that still overflows the window, MODEL
+	// and then LABEL shrink to their header widths with an ellipsis implying
+	// there is more; the whole-row clamp is the backstop for anything else.
+	const colLabel, colModel = 4, 6
+	headerCells := [7]string{"PATH", "SIZE", "TYPE", "FSTYPE", "LABEL", "MOUNTPOINT", "MODEL"}
+	rows := make([][7]string, len(a.devices))
+	for i, d := range a.devices {
+		mount := ""
+		if len(d.Mountpoints) > 0 {
+			mount = d.Mountpoints[0]
+			if len(d.Mountpoints) > 1 {
+				mount += fmt.Sprintf(" (+%d)", len(d.Mountpoints)-1)
+			}
+		}
+		indent := strings.Repeat("  ", a.list.depths[i])
+		rows[i] = [7]string{indent + d.Path, device.HumanSizeCompact(d.SizeBytes),
+			d.Type, d.FSType, d.Label, mount, d.Model}
+	}
+	var w [7]int
+	for c, h := range headerCells {
+		w[c] = len(h)
+	}
+	for _, r := range rows {
+		for c, cell := range r {
+			if n := len([]rune(cell)); n > w[c] {
+				w[c] = n
+			}
+		}
+	}
+	total := func() int {
+		t := 2 + 2*6 // leading indent + six two-space gaps
+		for _, x := range w {
+			t += x
+		}
+		return t
+	}
+	for _, c := range []int{colModel, colLabel} {
+		if over := total() - a.width; over > 0 {
+			w[c] = max(w[c]-over, len(headerCells[c]))
+		}
+	}
+	line := func(cells [7]string) string {
+		cells[colLabel] = trunc(cells[colLabel], w[colLabel])
+		cells[colModel] = trunc(cells[colModel], w[colModel])
+		return trunc(fmt.Sprintf("  %-*s  %*s  %-*s  %-*s  %-*s  %-*s  %s",
+			w[0], cells[0], w[1], cells[1], w[2], cells[2], w[3], cells[3],
+			w[4], cells[4], w[5], cells[5], cells[6]), a.width)
+	}
+
+	header := line(headerCells)
 	if a.list.cursor == -1 {
 		b.WriteString(styleSelected.Render(header) + "\n")
 	} else {
@@ -95,19 +141,8 @@ func (a *App) viewDeviceList() string {
 		b.WriteString(styleDim.Render("  (no block devices found)") + "\n")
 	}
 
-	for i, d := range a.devices {
-		indent := strings.Repeat("  ", a.list.depths[i])
-		mount := ""
-		if len(d.Mountpoints) > 0 {
-			mount = d.Mountpoints[0]
-			if len(d.Mountpoints) > 1 {
-				mount += fmt.Sprintf(" (+%d)", len(d.Mountpoints)-1)
-			}
-		}
-		row := fmt.Sprintf("  %-16s %8s  %-5s %-10s %-12s %-12s %s",
-			indent+d.Path, device.HumanSizeCompact(d.SizeBytes), d.Type,
-			trunc(d.FSType, 10), trunc(d.Label, 12), trunc(mount, 12), d.Model)
-		row = trunc(row, a.width)
+	for i := range rows {
+		row := line(rows[i])
 		switch {
 		case i == a.list.cursor:
 			b.WriteString(styleSelected.Render(row) + "\n")

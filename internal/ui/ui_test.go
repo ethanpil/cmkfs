@@ -714,6 +714,18 @@ func TestDeviceListFooterOrder(t *testing.T) {
 	}
 }
 
+// TestHelpOverlayShowsVersion: the ? overlay leads with the app name and
+// version.
+func TestHelpOverlayShowsVersion(t *testing.T) {
+	cfg := testConfig(t, []device.Device{cleanDisk()}, nil)
+	cfg.Version = "9.9.9"
+	a := NewApp(cfg)
+	press(a, "?")
+	if view := a.View(); !strings.Contains(view, "cmkfs 9.9.9") {
+		t.Fatalf("help overlay must show the version:\n%s", view)
+	}
+}
+
 func TestBoolToggleEmission(t *testing.T) {
 	a := NewApp(testConfig(t, []device.Device{cleanDisk()}, nil))
 	press(a, "down", "enter", "enter")

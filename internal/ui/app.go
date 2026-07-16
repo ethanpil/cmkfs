@@ -348,7 +348,11 @@ func (a *App) viewHelpOverlay() string {
 		{"a", "Expand Advanced — Extra Arguments (options form)"},
 		{"p", "Print the command and exit instead of executing (confirm screen)"},
 	}
-	out := styleTitle.Render("cmkfs — keys") + "\n\n"
+	title := "cmkfs"
+	if a.cfg.Version != "" {
+		title += " " + a.cfg.Version
+	}
+	out := styleTitle.Render(title+" — keys") + "\n\n"
 	for _, r := range rows {
 		out += fmt.Sprintf("  %-14s %s\n", styleHeader.Render(r[0]), r[1])
 	}

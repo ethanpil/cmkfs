@@ -73,6 +73,7 @@ sudo cmkfs /dev/sdb1       # skip the device list (all safety checks still apply
 sudo cmkfs -p /dev/sdb1    # after confirmation, print the command instead of running it
 sudo cmkfs --show-loop     # include loop devices in the list
 cmkfs --version            # version, commit, embedded schema ids
+man cmkfs                  # full reference (packages only; docs/cmkfs.8 in the tarball)
 ```
 
 There is deliberately no `--yes` / non-interactive mode: scripting users
@@ -140,8 +141,9 @@ should use `mkfs` directly — press `p` on the confirm screen (or use
 
 Build from source with `CGO_ENABLED=0 go build ./cmd/cmkfs` (see
 [Installation](#installation)). Go ≥ 1.25; the only third-party dependencies
-are the Charm TUI modules (bubbletea, bubbles, lipgloss) — everything else is
-the standard library.
+are the Charm modules (bubbletea, bubbles, lipgloss, and x/ansi) —
+everything else is the standard library, and CI asserts the direct
+dependency graph stays Charm-only.
 
 Run the test suite:
 
@@ -159,6 +161,37 @@ go run ./internal/gendemo docs/demo.gif
 ```
 
 ## Changelog
+
+**v0.3.0** — a device information screen and a rebuilt device list.
+
+Press `i` on any device for everything cmkfs knows about it: model, serial,
+transport, UUID, partition table, parent and children, free space per
+mountpoint, block size, and drive temperature where the kernel exposes one.
+It reads that off the UI thread, because `statfs` can hang on a wedged mount
+and a temperature read wakes a sleeping drive.
+
+The device list is now laid out with lipgloss/table. Columns size to their
+content, so short paths leave the space to MODEL; when the total doesn't
+fit, the columns with the most slack give theirs up and values truncate with
+an ellipsis. Widths are counted in display cells, so a CJK label can no
+longer overrun the window.
+
+Fixes from a review of the above, all of which shipped in the two commits
+before it: one long path or mountpoint no longer erases columns from every
+*other* row (a `/dev/mapper/luks-…` device could hide whether an unrelated
+disk was mounted); block size and temperature now resolve for partitions,
+where `filepath.Join` had been quietly eating the `..` that reaches the
+parent disk; the information screen scrolls instead of pushing the device
+path off a 24-row terminal; the help overlay lines up on a colour terminal;
+and the key hints sit directly under the table rather than moving with the
+findings. The man page is new, and the demo GIF is now real captures rather
+than a synthetic render.
+
+**v0.2.2** — the device list fits an 80-column terminal: columns were
+narrowed and every row is clamped to the window. Console colors are forced
+on `vt*` terminals (QEMU/UTM serial consoles advertise no color capability
+but render it fine), the text-heavy screens wrap to the window, and the
+options form shows concrete defaults instead of placeholders.
 
 **v0.2.1** — fixes from a post-release review: `-I` for mkfs.fat is now
 supplied for any whole device carrying a partition table (partitioned loop
@@ -202,9 +235,10 @@ real binary on real disks (see *On real hardware*).
 | Layer | Command | When |
 |---|---|---|
 | Unit + UI state-machine + fuzz seeds | `go test ./...` | every push / PR, no root |
+| UI again, with color forced | `CLICOLOR_FORCE=1 go test ./internal/ui/` | every push / PR — without a TTY every style is a no-op, so a layout bug that only exists once escape sequences are in the string passes unnoticed |
 | Fuzz smoke | `go test -fuzz=FuzzBuild -fuzztime=30s ./internal/cmdgen/` | every push / PR |
 | Loop-device integration | `sudo go test -tags integration ./integration/` | CI, as root, against the real `mkfs.*` backends |
-| Lint + static build matrix | `golangci-lint` + amd64/arm64 build | asserts a static binary, compiled-in schema, and a Charm-only dependency graph |
+| Lint + static build matrix | `golangci-lint` + `mandoc -T lint` + amd64/arm64 build | asserts a static binary, compiled-in schema, a Charm-only dependency graph, and a man page that renders |
 
 ### What is verified — and why it matters
 
@@ -231,7 +265,7 @@ Each is proven to stop the run *before* any format begins.
 - A failing `mkfs` is reported with its exit code and output — never dressed up as success.
 - A running format survives a stray Ctrl+C; only a deliberate double-Ctrl+C then typed `ABORT` cancels it.
 
-**The terminal UI** — the whole screen flow is driven by synthetic keystrokes and asserted (navigation, live validation, quit prompts, exit codes), and every screen is checked to fit an 80×24 terminal. The UI is the last thing between a user and a mistake; it has to behave on the smallest terminal we support.
+**The terminal UI** — the whole screen flow is driven by synthetic keystrokes and asserted (navigation, live validation, quit prompts, exit codes), and every screen is checked to fit an 80×24 terminal in both dimensions, measured in display cells so a wide-glyph label counts for what it actually occupies. The suite runs a second time with color forced, because styles are no-ops without a TTY and a screen that only misaligns once it is colored would otherwise pass. The UI is the last thing between a user and a mistake; it has to behave on the smallest terminal we support.
 
 **On real hardware** — loop devices and fixtures only go so far, so we also drive the *actual* binary through a real terminal on an Alpine Linux VM with real disks and the real backends: format real disks as all six filesystems; confirm version detection against the shipped tool versions; reproduce every refusal above against genuine LVM, dm-crypt, and mdadm setups; confirm whole-disk handling against a `mkfs.fat` that really does refuse without `-I`; and confirm color on a bare serial console plus correct layout at 80 columns. It is the closest we get to "does it behave on a real machine."
 
